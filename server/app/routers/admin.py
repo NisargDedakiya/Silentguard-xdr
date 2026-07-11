@@ -5,7 +5,7 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import schemas
+from .. import alerting, schemas
 from ..auth import require_admin
 from ..database import get_db
 from ..mitre import technique_for
@@ -93,6 +93,16 @@ async def _set_isolation(device_id: str, isolated: bool, db: Session, actor: str
            {"hostname": device.hostname})
     db.commit()
     await hub.broadcast({"type": "isolation", "device_id": device.id, "isolated": isolated})
+    if isolated:
+        await alerting.notify_critical(
+            {
+                "severity": "critical",
+                "summary": f"Device {device.hostname} isolated by admin",
+                "hostname": device.hostname,
+                "source": "isolation",
+                "action": action,
+            }
+        )
     return {"device_id": device.id, "isolated": isolated}
 
 

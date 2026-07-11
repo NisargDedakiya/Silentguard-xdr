@@ -6,7 +6,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import schemas
+from .. import alerting, schemas
 from ..auth import ENROLL_TOKEN, require_agent
 from ..database import get_db
 from ..mitre import technique_for
@@ -101,21 +101,21 @@ async def telemetry(
         stored.append(row)
     db.commit()
     for row in stored:
-        await hub.broadcast(
-            {
-                "type": "threat_event",
-                "id": row.id,
-                "device_id": device.id,
-                "hostname": device.hostname,
-                "timestamp": row.timestamp,
-                "source": row.source,
-                "severity": row.severity,
-                "action": row.action,
-                "summary": row.summary,
-                "details": row.details,
-                "mitre": technique_for(row.source, row.action),
-            }
-        )
+        payload = {
+            "type": "threat_event",
+            "id": row.id,
+            "device_id": device.id,
+            "hostname": device.hostname,
+            "timestamp": row.timestamp,
+            "source": row.source,
+            "severity": row.severity,
+            "action": row.action,
+            "summary": row.summary,
+            "details": row.details,
+            "mitre": technique_for(row.source, row.action),
+        }
+        await hub.broadcast(payload)
+        await alerting.notify_critical(payload)
     return {"accepted": len(stored)}
 
 

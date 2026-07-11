@@ -11,6 +11,7 @@ import datetime
 import logging
 import os
 
+from . import alerting
 from .database import SessionLocal
 from .mitre import technique_for
 from .models import Device, ThreatEvent, utcnow
@@ -71,6 +72,7 @@ async def check_once() -> list[str]:
 
     for payload in flagged:
         await hub.broadcast({"type": "threat_event", **payload})
+        await alerting.notify_critical(payload)
     return [f["hostname"] for f in flagged]
 
 

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import AnalyticsView from './analytics';
+
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 function adminHeaders(token) {
@@ -61,22 +63,26 @@ export default function Dashboard() {
   const [devices, setDevices] = useState([]);
   const [events, setEvents] = useState([]);
   const [blocklist, setBlocklist] = useState([]);
+  const [quarantine, setQuarantine] = useState([]);
   const [newEntry, setNewEntry] = useState({ kind: 'domain', value: '' });
   const [error, setError] = useState('');
   const [wsLive, setWsLive] = useState(false);
+  const [tab, setTab] = useState('overview');
   const tokenRef = useRef('');
 
   const refresh = useCallback(async (tok) => {
     const t = tok ?? tokenRef.current;
-    const [d, e, b] = await Promise.all([
+    const [d, e, b, q] = await Promise.all([
       fetch(`${API}/api/admin/devices`, { headers: adminHeaders(t) }),
-      fetch(`${API}/api/admin/events?limit=100`, { headers: adminHeaders(t) }),
+      fetch(`${API}/api/admin/events?limit=500`, { headers: adminHeaders(t) }),
       fetch(`${API}/api/admin/blocklist`, { headers: adminHeaders(t) }),
+      fetch(`${API}/api/admin/quarantine`, { headers: adminHeaders(t) }),
     ]);
     if (d.status === 401) throw new Error('Invalid admin token');
     setDevices(await d.json());
     setEvents(await e.json());
     setBlocklist(await b.json());
+    setQuarantine(await q.json());
   }, []);
 
   const login = async (ev) => {
@@ -140,6 +146,14 @@ export default function Dashboard() {
     refresh();
   };
 
+  const restoreQuarantine = async (id) => {
+    await fetch(`${API}/api/admin/quarantine/${id}/restore`, {
+      method: 'POST',
+      headers: adminHeaders(tokenRef.current),
+    });
+    refresh();
+  };
+
   if (!authed) {
     return (
       <main className="flex min-h-screen items-center justify-center p-6">
@@ -170,11 +184,32 @@ export default function Dashboard() {
         <h1 className="text-2xl font-semibold">
           <span className="text-emerald-400">SilentGuard</span> XDR — Command Matrix
         </h1>
-        <span className={`text-xs ${wsLive ? 'text-emerald-400' : 'text-slate-500'}`}>
-          {wsLive ? '● live stream connected' : '○ polling mode'}
-        </span>
+        <div className="flex items-center gap-4">
+          <nav className="flex rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-xs">
+            {['overview', 'analytics'].map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`rounded-md px-3 py-1.5 font-medium capitalize ${
+                  tab === t ? 'bg-slate-700 text-slate-100' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </nav>
+          <span className={`text-xs ${wsLive ? 'text-emerald-400' : 'text-slate-500'}`}>
+            {wsLive ? '● live stream connected' : '○ polling mode'}
+          </span>
+        </div>
       </header>
 
+      {tab === 'analytics' && (
+        <AnalyticsView devices={devices} events={events} blocklist={blocklist} />
+      )}
+
+      {tab === 'overview' && (
+      <>
       {/* Fleet overview */}
       <section className="rounded-xl border border-slate-800 bg-slate-900">
         <div className="border-b border-slate-800 px-5 py-3 text-sm font-medium text-slate-300">
@@ -307,6 +342,63 @@ export default function Dashboard() {
           </ul>
         </section>
       </div>
+
+      {/* Quarantine */}
+      <section className="rounded-xl border border-slate-800 bg-slate-900">
+        <div className="border-b border-slate-800 px-5 py-3 text-sm font-medium text-slate-300">
+          Quarantine ({quarantine.filter((q) => q.status !== 'restored').length} active)
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-5 py-2">File</th>
+                <th className="px-5 py-2">Host</th>
+                <th className="px-5 py-2">SHA-256</th>
+                <th className="px-5 py-2">Verdict</th>
+                <th className="px-5 py-2">Status</th>
+                <th className="px-5 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {quarantine.map((q) => (
+                <tr key={q.id} className="border-t border-slate-800/60">
+                  <td className="px-5 py-3 font-mono text-xs">{q.original_path}</td>
+                  <td className="px-5 py-3 text-slate-400">{q.hostname}</td>
+                  <td className="px-5 py-3 font-mono text-xs text-slate-500" title={q.sha256}>
+                    {q.sha256 ? `${q.sha256.slice(0, 12)}…` : '—'}
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className={q.verdict === 'known_bad' ? 'text-red-400' : 'text-slate-400'}>
+                      {q.verdict}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-slate-400">{q.status}</td>
+                  <td className="px-5 py-3 text-right">
+                    {q.status === 'quarantined' && (
+                      <button
+                        onClick={() => restoreQuarantine(q.id)}
+                        className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-600"
+                      >
+                        Restore
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {quarantine.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-5 py-6 text-center text-slate-500">
+                    Nothing in quarantine.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      </>
+      )}
     </main>
   );
 }

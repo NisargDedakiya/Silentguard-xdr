@@ -70,6 +70,15 @@ class BlocklistAdd(BaseModel):
     value: str
 
 
+class AuditOut(BaseModel):
+    id: int
+    timestamp: datetime.datetime
+    actor: str  # admin token fingerprint
+    action: str
+    target: str
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 class QuarantineOut(BaseModel):
     id: str
     device_id: str

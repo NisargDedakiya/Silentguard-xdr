@@ -66,6 +66,20 @@ class QuarantineItem(Base):
     restored_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class AuditLogEntry(Base):
+    """Immutable record of every admin action (isolate, release, blocklist
+    add/remove, quarantine restore) with the acting token's fingerprint."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    actor: Mapped[str] = mapped_column(String(32))  # admin token fingerprint
+    action: Mapped[str] = mapped_column(String(64))
+    target: Mapped[str] = mapped_column(String(255), default="")
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
 class BlocklistEntry(Base):
     __tablename__ = "blocklist"
 

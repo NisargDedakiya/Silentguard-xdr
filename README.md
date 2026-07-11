@@ -14,11 +14,13 @@ Built from the SilentGuard XDR project proposal (semester MVP scope).
 │  Endpoint Agent     │ ───────────────────────► │  Command Matrix API  │
 │  (Python)           │ ◄─────────────────────── │  (FastAPI + SQL)     │
 │  · Port watchdog    │   check-in: isolation,   └──────────┬───────────┘
-│  · DNS sinkhole     │   commands, blocklists              │ REST + WebSocket
-│  · ARP guard        │                          ┌──────────▼───────────┐
-│  · Isolation ctrl   │                          │  Admin Dashboard     │
-└─────────────────────┘                          │  (Next.js + Tailwind)│
-                                                 └──────────────────────┘
+│  · DNS sinkhole     │   commands, blocklists,             │ REST + WebSocket
+│  · ARP guard        │   quarantine restores    ┌──────────▼───────────┐
+│  · File-drop watch  │                          │  Admin Dashboard     │
+│  · USB guard        │                          │  (Next.js + Tailwind │
+│  · Quarantine       │                          │   + recharts)        │
+│  · Isolation ctrl   │                          └──────────────────────┘
+└─────────────────────┘
 ```
 
 ### The three pillars
@@ -108,10 +110,14 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8000 npm run dev
 Open http://localhost:3000 and sign in with the admin token
 (`silentguard-admin-demo` by default). You get:
 
-- **Device Fleet** — live online/offline/isolated status for every endpoint
-- **Threat Timeline** — chronological feed of every detection and automated action
+- **Device Fleet** — live online/offline/isolated status + risk badge for every endpoint
+- **Threat Timeline** — chronological feed of every detection and automated action,
+  each tagged with its MITRE ATT&CK technique (linked to attack.mitre.org)
 - **Remote Isolation** — one click restricts a device's network to the management server only
 - **Fleet Blocklist** — push malicious domains / process names / ports to all agents
+- **Quarantine** — inspect files agents have quarantined and restore them remotely
+- **Analytics tab** — events-per-day by severity, top triggered devices, and
+  blocklist hit counts (recharts, computed client-side from the events API)
 
 ## Demo scenario (matches the proposal's demonstration plan)
 
@@ -138,6 +144,58 @@ Open http://localhost:3000 and sign in with the admin token
   surfacing an agent that was killed and did not restart. The flag clears
   automatically on the next telemetry or check-in.
 
+## File hash reputation + quarantine
+
+When the port watchdog kills a flagged process — or the file-drop monitor spots
+a new file in a watched directory (`/tmp`, `~/Downloads`) — the file's SHA-256
+is checked against a local reputation table: built-in known-bad hashes (EICAR
+by default) extended by a user-maintained `~/.silentguard/reputation.json`
+(`{"known_bad": [...], "allowlist": [...]}`). Flagged files are **moved, never
+deleted**: renamed to an opaque id inside `~/.silentguard/quarantine/` with all
+permissions stripped, so they can be inspected or restored later.
+Allowlisted hashes are never quarantined.
+
+- `GET /api/admin/quarantine` — fleet-wide quarantine inventory
+- `POST /api/admin/quarantine/{id}/restore` — queues a restore command that the
+  agent executes on its next check-in and confirms via telemetry
+
+## USB device monitoring
+
+The `usb_guard` monitor detects USB mass-storage insertion (warning event) and
+removal (info event). Backends: `pyudev` when installed, a dependency-free
+`/sys/block` poller otherwise on Linux, WMI on Windows. Set
+`SG_BLOCK_USB_STORAGE=1` to block newly inserted storage devices outright
+(Linux: sysfs de-authorization; Windows: disable USBSTOR) — blocked devices
+raise a critical event. Devices present at agent start are baselined silently.
+
+## MITRE ATT&CK technique tagging
+
+Every threat event is tagged with the ATT&CK technique it evidences via a
+static `(source, action)` mapping (`server/app/mitre.py`) — e.g.
+`port_watchdog/killed → T1059`, `arp_guard → T1557.002`, `usb_guard → T1091`.
+The technique id/name/url rides along in the admin API, WebSocket pushes, and
+the dashboard timeline tag.
+
+## Admin audit log
+
+Every admin action (isolate, release, blocklist add/remove, quarantine restore)
+is recorded in a separate `audit_log` table — actor token fingerprint (SHA-256
+prefix, never the token), timestamp, target, and details — committed atomically
+with the action itself. Read-only endpoint: `GET /api/admin/audit`.
+
+## Alerting (webhook + email)
+
+Critical-severity events fire best-effort notifications, configured by env vars:
+
+```bash
+SG_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/T000/B000/XXXX  # Slack or Discord
+SG_SMTP_HOST=smtp.example.com SG_SMTP_PORT=587 SG_SMTP_USER=... SG_SMTP_PASSWORD=...
+SG_SMTP_FROM=xdr@example.com SG_ALERT_EMAIL_TO=soc@example.com
+```
+
+Delivery is fire-and-forget on a worker thread with a 5s timeout; a broken
+webhook or SMTP server can never stall telemetry ingestion.
+
 ## Device risk score
 
 Each device carries a weighted risk score over a rolling 24h window
@@ -149,17 +207,27 @@ foundation for the roadmap's Behavioral Detection Engine.
 ## Testing
 
 ```bash
-cd server && pytest        # API + liveness monitor + scoring (in-memory SQLite)
-cd agent  && pytest        # monitors, mocked psutil/subprocess, no root needed
+cd server && pip install -r requirements.txt && pytest   # API, WS auth, quarantine, audit, alerting, scoring
+cd agent  && pip install -r requirements.txt && pytest   # monitors, quarantine, USB guard — no root needed
 ```
+
+Test dependencies (pytest, pytest-asyncio, httpx2) ship in
+`server/requirements.txt`, so a fresh `pip install -r requirements.txt`
+is all that's needed before `pytest -q`.
 
 ## Security design
 
 - Per-device API keys issued at enrollment (`X-Agent-Key`) authenticate all telemetry.
 - Shared enrollment token gates onboarding; shared admin token (`X-Admin-Token`)
   gates the dashboard API (RBAC/SSO/MFA are on the enterprise roadmap).
+- The live WebSocket (`/api/ws`) requires the admin token (query param or first
+  message) and closes unauthenticated connections with a policy violation.
+- Token comparisons use `secrets.compare_digest`; the audit log stores only a
+  hash fingerprint of the acting token.
 - Offline event buffering (bounded queue) so no data is lost during connectivity gaps.
 - Local agent state written with owner-only permissions.
+- Quarantine never deletes: files are moved, renamed, and permission-stripped so
+  incident responders can inspect or restore them.
 
 ## Repository layout
 
@@ -169,8 +237,27 @@ server/      FastAPI backend — enrollment, telemetry ingestion, admin API, Web
 dashboard/   Next.js + Tailwind admin dashboard
 ```
 
-## Enterprise roadmap (out of MVP scope, per proposal)
+## Prioritized backlog (explicitly deferred — not in this cycle)
 
-Behavioral risk-scoring engine, AI security assistant (MITRE ATT&CK mapping),
-threat-intel feeds, RBAC/SSO/MFA, macOS/Linux-optimized agents, SIEM/SOAR
-integration, Rust production agent, Kubernetes-scale deployment.
+Deliberately not built yet: each is a real roadmap item, but too large to
+implement safely alongside the current feature set without going shallow on
+everything. In priority order:
+
+1. **RBAC / SSO / MFA** — replace the shared admin token with per-user accounts,
+   roles, and single sign-on.
+2. **Windows Event Log + registry monitoring** — first-class Windows detection
+   sources beyond process/port scanning.
+3. **Ransomware behavioral detection** — mass-file-modification / entropy
+   heuristics with automatic isolation.
+4. **Policy management UI** — edit per-fleet detection policies (watched dirs,
+   suspicious ports, USB policy) from the dashboard instead of env vars.
+5. **Agent auto-update** — signed agent packages with staged rollout.
+6. **Scheduled scan engine** — periodic full-disk hash sweeps against the
+   reputation table.
+7. **Behavioral Detection Engine / AI Security Assistant** — extend the risk
+   score into sequence-aware detection with plain-language incident summaries.
+8. **Process tree visualization** — parent/child ancestry for each detection.
+9. **Multi-tenant organizations** — isolated fleets, per-tenant tokens and data.
+10. **SIEM/SOAR integration** — syslog/CEF export, webhook-driven playbooks.
+11. **YARA / Suricata integration** — signature scanning of quarantined files
+    and network traffic.

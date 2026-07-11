@@ -1,5 +1,8 @@
 psutil>=5.9
 requests>=2.31
+# Test dependency — kept here so `pip install -r requirements.txt && pytest -q`
+# passes with no manual extras.
+pytest>=8.0
 # scapy is optional — used for active ARP verification when available
 # scapy>=2.5
 # Optional USB monitoring backends (a dependency-free /sys/block poller is

@@ -1,0 +1,33 @@
+"""Authentication helpers.
+
+Agents authenticate with a per-device API key issued at enrollment
+(X-Agent-Key header). Admin/dashboard requests authenticate with a shared
+admin token (X-Admin-Token header). Both are simple bearer-style secrets for
+the MVP; the enterprise roadmap replaces the admin token with RBAC/SSO/MFA.
+"""
+import os
+import secrets
+
+from fastapi import Depends, Header, HTTPException
+from sqlalchemy.orm import Session
+
+from .database import get_db
+from .models import Device
+
+ENROLL_TOKEN = os.environ.get("SG_ENROLL_TOKEN", "silentguard-enroll-demo")
+ADMIN_TOKEN = os.environ.get("SG_ADMIN_TOKEN", "silentguard-admin-demo")
+
+
+def require_admin(x_admin_token: str = Header(default="")) -> None:
+    if not secrets.compare_digest(x_admin_token, ADMIN_TOKEN):
+        raise HTTPException(status_code=401, detail="Invalid admin token")
+
+
+def require_agent(
+    x_agent_key: str = Header(default=""),
+    db: Session = Depends(get_db),
+) -> Device:
+    device = db.query(Device).filter(Device.api_key == x_agent_key).first()
+    if device is None:
+        raise HTTPException(status_code=401, detail="Invalid agent key")
+    return device

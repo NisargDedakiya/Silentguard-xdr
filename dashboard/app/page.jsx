@@ -22,6 +22,24 @@ function SeverityBadge({ severity }) {
   );
 }
 
+const RISK_STYLES = {
+  critical: 'bg-red-500/15 text-red-400 border-red-500/40',
+  elevated: 'bg-amber-500/15 text-amber-400 border-amber-500/40',
+  low: 'bg-sky-500/15 text-sky-400 border-sky-500/40',
+  clear: 'bg-slate-700/40 text-slate-400 border-slate-600/40',
+};
+
+function RiskBadge({ score, band }) {
+  return (
+    <span
+      title={`Risk score ${score} — ${band} (rolling 24h)`}
+      className={`px-2 py-0.5 rounded-full text-xs border ${RISK_STYLES[band] || RISK_STYLES.clear}`}
+    >
+      {score} · {band}
+    </span>
+  );
+}
+
 export default function Dashboard() {
   const [token, setToken] = useState('');
   const [authed, setAuthed] = useState(false);
@@ -153,6 +171,7 @@ export default function Dashboard() {
                 <th className="px-5 py-2">Hostname</th>
                 <th className="px-5 py-2">Platform</th>
                 <th className="px-5 py-2">Status</th>
+                <th className="px-5 py-2">Risk</th>
                 <th className="px-5 py-2">Last seen</th>
                 <th className="px-5 py-2">Isolation</th>
               </tr>
@@ -171,6 +190,9 @@ export default function Dashboard() {
                       <span className="text-slate-500">○ offline</span>
                     )}
                   </td>
+                  <td className="px-5 py-3">
+                    <RiskBadge score={d.risk_score} band={d.risk_band} />
+                  </td>
                   <td className="px-5 py-3 text-slate-400">{new Date(d.last_seen).toLocaleString()}</td>
                   <td className="px-5 py-3">
                     <button
@@ -188,7 +210,7 @@ export default function Dashboard() {
               ))}
               {devices.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-6 text-center text-slate-500">
+                  <td colSpan={6} className="px-5 py-6 text-center text-slate-500">
                     No devices enrolled yet — start an agent to see it here.
                   </td>
                 </tr>

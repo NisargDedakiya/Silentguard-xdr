@@ -9,6 +9,7 @@ from .. import schemas
 from ..auth import require_admin
 from ..database import get_db
 from ..models import BlocklistEntry, Device, ThreatEvent, utcnow
+from ..scoring import compute_score
 from ..ws import hub
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -16,10 +17,11 @@ router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(re
 ONLINE_WINDOW = datetime.timedelta(seconds=60)
 
 
-def _device_out(d: Device) -> schemas.DeviceOut:
+def _device_out(d: Device, db: Session) -> schemas.DeviceOut:
     last_seen = d.last_seen
     if last_seen.tzinfo is None:
         last_seen = last_seen.replace(tzinfo=datetime.timezone.utc)
+    score = compute_score(db, d.id)
     return schemas.DeviceOut(
         id=d.id,
         hostname=d.hostname,
@@ -29,12 +31,14 @@ def _device_out(d: Device) -> schemas.DeviceOut:
         last_seen=d.last_seen,
         isolated=d.isolated,
         online=(utcnow() - last_seen) < ONLINE_WINDOW,
+        risk_score=score["score"],
+        risk_band=score["band"],
     )
 
 
 @router.get("/devices", response_model=list[schemas.DeviceOut])
 def list_devices(db: Session = Depends(get_db)):
-    return [_device_out(d) for d in db.query(Device).order_by(Device.enrolled_at).all()]
+    return [_device_out(d, db) for d in db.query(Device).order_by(Device.enrolled_at).all()]
 
 
 @router.get("/events", response_model=list[schemas.EventOut])
@@ -90,6 +94,13 @@ async def isolate_device(device_id: str, db: Session = Depends(get_db)):
 @router.post("/devices/{device_id}/release")
 async def release_device(device_id: str, db: Session = Depends(get_db)):
     return await _set_isolation(device_id, False, db)
+
+
+@router.get("/devices/{device_id}/score")
+def device_score(device_id: str, db: Session = Depends(get_db)):
+    if db.get(Device, device_id) is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return compute_score(db, device_id)
 
 
 @router.get("/blocklist")

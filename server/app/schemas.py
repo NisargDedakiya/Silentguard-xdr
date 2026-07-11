@@ -44,6 +44,8 @@ class DeviceOut(BaseModel):
     last_seen: datetime.datetime
     isolated: bool
     online: bool
+    risk_score: float = 0.0
+    risk_band: str = "clear"
 
     model_config = ConfigDict(from_attributes=True)
 

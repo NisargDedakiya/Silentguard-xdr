@@ -126,6 +126,33 @@ Open http://localhost:3000 and sign in with the admin token
 > and rewriting firewall rules requires root/Administrator; use `SG_DRY_RUN=1`
 > otherwise.
 
+## Tamper resilience
+
+- **Agent auto-restart** — install the agent as a supervised service so it
+  relaunches within seconds if killed:
+  - Linux: `deploy/silentguard-agent.service` (systemd, `Restart=always`)
+  - Windows: `deploy/SilentGuardAgent-Task.xml` (Task Scheduler, boot trigger + restart-on-failure)
+- **Server-side liveness monitor** — a background sweep emits a critical
+  `device_unresponsive` event to the timeline when a device's `last_seen`
+  exceeds `SG_UNRESPONSIVE_SECONDS` (default 45s) without a clean stop,
+  surfacing an agent that was killed and did not restart. The flag clears
+  automatically on the next telemetry or check-in.
+
+## Device risk score
+
+Each device carries a weighted risk score over a rolling 24h window
+(`critical=10`, `warning=3`, `info=0`), linearly decayed by event age, banded
+as clear / low / elevated / critical. Shown as a badge in the dashboard device
+table and available at `GET /api/admin/devices/{id}/score`. This is the
+foundation for the roadmap's Behavioral Detection Engine.
+
+## Testing
+
+```bash
+cd server && pytest        # API + liveness monitor + scoring (in-memory SQLite)
+cd agent  && pytest        # monitors, mocked psutil/subprocess, no root needed
+```
+
 ## Security design
 
 - Per-device API keys issued at enrollment (`X-Agent-Key`) authenticate all telemetry.

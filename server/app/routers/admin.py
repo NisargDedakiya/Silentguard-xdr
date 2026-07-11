@@ -9,7 +9,7 @@ from .. import schemas
 from ..auth import require_admin
 from ..database import get_db
 from ..models import BlocklistEntry, Device, ThreatEvent, utcnow
-from ..scoring import compute_score
+from ..scoring import compute_score, compute_scores
 from ..ws import hub
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -17,11 +17,10 @@ router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(re
 ONLINE_WINDOW = datetime.timedelta(seconds=60)
 
 
-def _device_out(d: Device, db: Session) -> schemas.DeviceOut:
+def _device_out(d: Device, score: dict) -> schemas.DeviceOut:
     last_seen = d.last_seen
     if last_seen.tzinfo is None:
         last_seen = last_seen.replace(tzinfo=datetime.timezone.utc)
-    score = compute_score(db, d.id)
     return schemas.DeviceOut(
         id=d.id,
         hostname=d.hostname,
@@ -38,7 +37,9 @@ def _device_out(d: Device, db: Session) -> schemas.DeviceOut:
 
 @router.get("/devices", response_model=list[schemas.DeviceOut])
 def list_devices(db: Session = Depends(get_db)):
-    return [_device_out(d, db) for d in db.query(Device).order_by(Device.enrolled_at).all()]
+    devices = db.query(Device).order_by(Device.enrolled_at).all()
+    scores = compute_scores(db, [d.id for d in devices])
+    return [_device_out(d, scores[d.id]) for d in devices]
 
 
 @router.get("/events", response_model=list[schemas.EventOut])

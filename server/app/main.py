@@ -6,10 +6,12 @@ For TLS 1.3 in production, terminate TLS at the reverse proxy (nginx) or pass
 """
 import asyncio
 import contextlib
+import secrets
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from .auth import ADMIN_TOKEN
 from .database import Base, engine
 from .monitor import run_monitor_loop
 from .routers import admin, agents
@@ -47,9 +49,30 @@ def health():
     return {"status": "ok", "service": "silentguard-xdr"}
 
 
+WS_AUTH_TIMEOUT_SECONDS = 10
+WS_POLICY_VIOLATION = 1008
+
+
 @app.websocket("/api/ws")
-async def ws_endpoint(ws: WebSocket):
-    """Live event stream for the dashboard."""
+async def ws_endpoint(ws: WebSocket, token: str = Query(default="")):
+    """Live event stream for the dashboard.
+
+    Requires the admin token, supplied either as a `?token=` query parameter
+    or as the first text message after connecting. Invalid or missing tokens
+    get a policy-violation close before any events are streamed.
+    """
+    await ws.accept()
+    supplied = token
+    if not supplied:
+        try:
+            supplied = await asyncio.wait_for(ws.receive_text(), timeout=WS_AUTH_TIMEOUT_SECONDS)
+        except (asyncio.TimeoutError, WebSocketDisconnect):
+            with contextlib.suppress(RuntimeError):
+                await ws.close(code=WS_POLICY_VIOLATION)
+            return
+    if not secrets.compare_digest(supplied, ADMIN_TOKEN):
+        await ws.close(code=WS_POLICY_VIOLATION)
+        return
     await hub.connect(ws)
     try:
         while True:

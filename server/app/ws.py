@@ -12,7 +12,7 @@ class WsHub:
         self._lock = asyncio.Lock()
 
     async def connect(self, ws: WebSocket) -> None:
-        await ws.accept()
+        """Register an already-accepted (and authenticated) socket."""
         async with self._lock:
             self._clients.add(ws)
 

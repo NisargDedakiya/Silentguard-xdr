@@ -79,7 +79,8 @@ export default function Dashboard() {
   // Live updates: WebSocket push + slow polling fallback for online status.
   useEffect(() => {
     if (!authed) return undefined;
-    const wsUrl = API.replace(/^http/, 'ws') + '/api/ws';
+    const wsUrl =
+      API.replace(/^http/, 'ws') + '/api/ws?token=' + encodeURIComponent(tokenRef.current);
     let ws;
     try {
       ws = new WebSocket(wsUrl);

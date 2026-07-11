@@ -23,6 +23,7 @@ from .monitors.arp_guard import ArpGuard
 from .monitors.dns_sinkhole import DnsSinkhole
 from .monitors.file_drop import FileDropMonitor
 from .monitors.port_watchdog import PortWatchdog
+from .monitors.usb_guard import UsbGuard
 from .quarantine import QuarantineManager
 from .telemetry import TelemetryClient
 
@@ -51,6 +52,7 @@ def run() -> None:
     sinkhole = DnsSinkhole(config, telemetry)
     arp_guard = ArpGuard(config, telemetry)
     file_drop = FileDropMonitor(config, telemetry, quarantine)
+    usb_guard = UsbGuard(config, telemetry)
     isolation = IsolationController(config, telemetry)
 
     def handle_command(cmd: dict) -> None:
@@ -88,6 +90,7 @@ def run() -> None:
             arp_guard.scan()
             sinkhole.sync()
             file_drop.scan()
+            usb_guard.scan()
 
             now = time.monotonic()
             if now - last_checkin >= config.checkin_interval:

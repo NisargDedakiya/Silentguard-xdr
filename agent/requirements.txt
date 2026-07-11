@@ -2,3 +2,7 @@ psutil>=5.9
 requests>=2.31
 # scapy is optional — used for active ARP verification when available
 # scapy>=2.5
+# Optional USB monitoring backends (a dependency-free /sys/block poller is
+# used on Linux when pyudev is not installed):
+# pyudev>=0.24   (Linux)
+# wmi; pywin32   (Windows)

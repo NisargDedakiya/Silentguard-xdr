@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..auth import ENROLL_TOKEN, require_agent
 from ..database import get_db
+from ..mitre import technique_for
 from ..models import BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
 from ..ws import hub
 
@@ -112,6 +113,7 @@ async def telemetry(
                 "action": row.action,
                 "summary": row.summary,
                 "details": row.details,
+                "mitre": technique_for(row.source, row.action),
             }
         )
     return {"accepted": len(stored)}

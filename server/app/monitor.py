@@ -12,6 +12,7 @@ import logging
 import os
 
 from .database import SessionLocal
+from .mitre import technique_for
 from .models import Device, ThreatEvent, utcnow
 from .ws import hub
 
@@ -61,6 +62,7 @@ async def check_once() -> list[str]:
                     "action": event.action,
                     "summary": event.summary,
                     "details": event.details,
+                    "mitre": technique_for(event.source, event.action),
                 }
             )
         db.commit()

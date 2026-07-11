@@ -60,6 +60,9 @@ class EventOut(BaseModel):
     action: str
     summary: str
     details: dict[str, Any]
+    # MITRE ATT&CK technique evidenced by this event, e.g.
+    # {"id": "T1059", "name": "Command and Scripting Interpreter", "url": ...}
+    mitre: Optional[dict[str, str]] = None
 
 
 class BlocklistAdd(BaseModel):

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..auth import require_admin
 from ..database import get_db
+from ..mitre import technique_for
 from ..models import BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
 from ..scoring import compute_score, compute_scores
 from ..ws import hub
@@ -59,6 +60,7 @@ def list_events(limit: int = 100, device_id: str | None = None, db: Session = De
             action=r.action,
             summary=r.summary,
             details=r.details or {},
+            mitre=technique_for(r.source, r.action),
         )
         for r in rows
     ]

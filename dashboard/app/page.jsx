@@ -29,6 +29,21 @@ const RISK_STYLES = {
   clear: 'bg-slate-700/40 text-slate-400 border-slate-600/40',
 };
 
+function MitreTag({ mitre }) {
+  if (!mitre) return null;
+  return (
+    <a
+      href={mitre.url}
+      target="_blank"
+      rel="noreferrer"
+      title={`MITRE ATT&CK — ${mitre.name}`}
+      className="rounded border border-violet-500/40 bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-mono text-violet-300 hover:bg-violet-500/30"
+    >
+      {mitre.id}
+    </a>
+  );
+}
+
 function RiskBadge({ score, band }) {
   return (
     <span
@@ -232,7 +247,9 @@ export default function Dashboard() {
               <li key={e.id} className="flex items-start gap-3 px-5 py-3">
                 <SeverityBadge severity={e.severity} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm">{e.summary}</p>
+                  <p className="text-sm">
+                    {e.summary} <MitreTag mitre={e.mitre} />
+                  </p>
                   <p className="mt-0.5 text-xs text-slate-500">
                     {e.hostname} · {e.source} · {e.action} · {new Date(e.timestamp).toLocaleString()}
                   </p>

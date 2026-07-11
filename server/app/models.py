@@ -23,6 +23,10 @@ class Device(Base):
     last_seen: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     isolated: Mapped[bool] = mapped_column(Boolean, default=False)
     pending_commands: Mapped[list] = mapped_column(JSON, default=list)
+    # Tamper-resilience bookkeeping: set when the agent reports a clean stop,
+    # and to avoid emitting duplicate "device_unresponsive" alerts.
+    stopped: Mapped[bool] = mapped_column(Boolean, default=False)
+    unresponsive_alerted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     events: Mapped[list["ThreatEvent"]] = relationship(back_populates="device")
 

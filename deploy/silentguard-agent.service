@@ -1,0 +1,32 @@
+# SilentGuard XDR agent — systemd unit (Linux).
+#
+# Install:
+#   sudo cp deploy/silentguard-agent.service /etc/systemd/system/
+#   sudo mkdir -p /etc/silentguard
+#   # put SG_SERVER_URL / SG_ENROLL_TOKEN / etc. in /etc/silentguard/agent.env
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now silentguard-agent
+#
+# Tamper resilience: Restart=always with a short RestartSec means the agent is
+# relaunched within seconds if a user or malware kills it. StartLimit* allow
+# unlimited restarts so an attacker cannot exhaust the restart budget.
+
+[Unit]
+Description=SilentGuard XDR Endpoint Agent
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# Adjust WorkingDirectory/ExecStart to the install path of the agent package.
+WorkingDirectory=/opt/silentguard/agent
+EnvironmentFile=-/etc/silentguard/agent.env
+ExecStart=/usr/bin/python3 -m silentguard_agent.main
+Restart=always
+RestartSec=3
+# Needs root to kill processes, edit the hosts file and manage the firewall.
+User=root
+
+[Install]
+WantedBy=multi-user.target

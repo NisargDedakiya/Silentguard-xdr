@@ -47,8 +47,15 @@ async def telemetry(
     db: Session = Depends(get_db),
 ):
     device.last_seen = utcnow()
+    # Any telemetry means the agent is alive again → clear an unresponsive flag.
+    device.unresponsive_alerted = False
     stored = []
     for ev in batch.events:
+        if ev.source == "agent" and ev.action == "stopped":
+            device.stopped = True
+        elif ev.source == "agent" and ev.action == "started":
+            device.stopped = False
+
         row = ThreatEvent(
             device_id=device.id,
             timestamp=ev.timestamp or utcnow(),
@@ -84,6 +91,7 @@ async def checkin(device: Device = Depends(require_agent), db: Session = Depends
     """Heartbeat: agent polls for isolation state, queued commands and the
     current fleet blocklist."""
     device.last_seen = utcnow()
+    device.unresponsive_alerted = False
     commands = list(device.pending_commands or [])
     device.pending_commands = []
     entries = db.query(BlocklistEntry).all()

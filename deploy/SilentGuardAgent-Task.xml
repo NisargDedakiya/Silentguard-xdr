@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  SilentGuard XDR agent - Windows Task Scheduler template.
+
+  Import:
+    schtasks /Create /TN "SilentGuard Agent" /XML deploy\SilentGuardAgent-Task.xml /RU SYSTEM
+
+  Tamper resilience: the task runs at boot as SYSTEM and, via
+  RestartOnFailure, relaunches the agent within one minute if it exits or is
+  killed. Adjust the Command/WorkingDirectory paths to the install location.
+-->
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>SilentGuard XDR Endpoint Agent - autonomous EDR agent with auto-restart</Description>
+    <URI>\SilentGuard Agent</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <BootTrigger>
+      <Enabled>true</Enabled>
+    </BootTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-18</UserId> <!-- LocalSystem -->
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>false</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>999</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>python.exe</Command>
+      <Arguments>-m silentguard_agent.main</Arguments>
+      <WorkingDirectory>C:\Program Files\SilentGuard\agent</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

@@ -4,16 +4,32 @@ Run:  uvicorn app.main:app --host 0.0.0.0 --port 8000
 For TLS 1.3 in production, terminate TLS at the reverse proxy (nginx) or pass
 --ssl-keyfile/--ssl-certfile to uvicorn.
 """
+import asyncio
+import contextlib
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from .database import Base, engine
+from .monitor import run_monitor_loop
 from .routers import admin, agents
 from .ws import hub
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="SilentGuard XDR", version="0.1.0")
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(run_monitor_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+app = FastAPI(title="SilentGuard XDR", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

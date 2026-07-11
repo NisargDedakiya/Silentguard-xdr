@@ -65,3 +65,16 @@ class EventOut(BaseModel):
 class BlocklistAdd(BaseModel):
     kind: str  # domain | process | port
     value: str
+
+
+class QuarantineOut(BaseModel):
+    id: str
+    device_id: str
+    hostname: str = ""
+    original_path: str
+    sha256: str
+    reason: str
+    verdict: str
+    status: str
+    quarantined_at: datetime.datetime
+    restored_at: Optional[datetime.datetime] = None

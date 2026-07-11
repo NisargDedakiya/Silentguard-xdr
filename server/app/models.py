@@ -47,6 +47,25 @@ class ThreatEvent(Base):
     device: Mapped[Device] = relationship(back_populates="events")
 
 
+class QuarantineItem(Base):
+    """Fleet-wide view of files agents have quarantined. Rows are created and
+    updated from agent telemetry (source=quarantine/file_drop); restores are
+    requested from the dashboard and executed by the agent on next check-in."""
+
+    __tablename__ = "quarantine_items"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # agent-side quarantine id
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), index=True)
+    original_path: Mapped[str] = mapped_column(Text)
+    sha256: Mapped[str] = mapped_column(String(64), default="")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    verdict: Mapped[str] = mapped_column(String(16), default="unknown")  # known_bad|unknown
+    # quarantined | restore_requested | restored
+    status: Mapped[str] = mapped_column(String(24), default="quarantined")
+    quarantined_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    restored_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class BlocklistEntry(Base):
     __tablename__ = "blocklist"
 

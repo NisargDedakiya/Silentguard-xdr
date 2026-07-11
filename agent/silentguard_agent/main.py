@@ -21,7 +21,9 @@ from .config import AgentConfig
 from .isolation import IsolationController
 from .monitors.arp_guard import ArpGuard
 from .monitors.dns_sinkhole import DnsSinkhole
+from .monitors.file_drop import FileDropMonitor
 from .monitors.port_watchdog import PortWatchdog
+from .quarantine import QuarantineManager
 from .telemetry import TelemetryClient
 
 log = logging.getLogger("silentguard")
@@ -44,10 +46,29 @@ def run() -> None:
             log.warning("Enrollment failed (%s), retrying in 5s", exc)
             time.sleep(5)
 
-    watchdog = PortWatchdog(config, telemetry)
+    quarantine = QuarantineManager(config)
+    watchdog = PortWatchdog(config, telemetry, quarantine)
     sinkhole = DnsSinkhole(config, telemetry)
     arp_guard = ArpGuard(config, telemetry)
+    file_drop = FileDropMonitor(config, telemetry, quarantine)
     isolation = IsolationController(config, telemetry)
+
+    def handle_command(cmd: dict) -> None:
+        if cmd.get("command") == "restore_quarantine":
+            qid = cmd.get("id", "")
+            entry = quarantine.restore(qid)
+            if entry:
+                telemetry.emit(
+                    "quarantine", "restored",
+                    f"Quarantined file restored to {entry['original_path']}",
+                    severity="info", details=entry,
+                )
+            else:
+                telemetry.emit(
+                    "quarantine", "restore_failed",
+                    f"Failed to restore quarantine item {qid}",
+                    severity="warning", details={"id": qid},
+                )
 
     running = True
 
@@ -66,12 +87,15 @@ def run() -> None:
             watchdog.scan()
             arp_guard.scan()
             sinkhole.sync()
+            file_drop.scan()
 
             now = time.monotonic()
             if now - last_checkin >= config.checkin_interval:
                 last_checkin = now
                 state = telemetry.checkin()
                 if state:
+                    for cmd in state.get("commands", []):
+                        handle_command(cmd)
                     # Merge fleet blocklist pushed from the dashboard.
                     bl = state.get("blocklist", {})
                     config.blocked_domains.update(bl.get("domain", []))

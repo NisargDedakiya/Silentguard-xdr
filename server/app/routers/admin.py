@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..auth import require_admin
 from ..database import get_db
-from ..models import BlocklistEntry, Device, ThreatEvent, utcnow
+from ..models import BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
 from ..scoring import compute_score, compute_scores
 from ..ws import hub
 
@@ -102,6 +102,63 @@ def device_score(device_id: str, db: Session = Depends(get_db)):
     if db.get(Device, device_id) is None:
         raise HTTPException(status_code=404, detail="Device not found")
     return compute_score(db, device_id)
+
+
+@router.get("/quarantine", response_model=list[schemas.QuarantineOut])
+def list_quarantine(device_id: str | None = None, db: Session = Depends(get_db)):
+    q = db.query(QuarantineItem).order_by(QuarantineItem.quarantined_at.desc())
+    if device_id:
+        q = q.filter(QuarantineItem.device_id == device_id)
+    items = q.all()
+    hostnames = {
+        d.id: d.hostname
+        for d in db.query(Device).filter(Device.id.in_({i.device_id for i in items})).all()
+    }
+    return [
+        schemas.QuarantineOut(
+            id=i.id,
+            device_id=i.device_id,
+            hostname=hostnames.get(i.device_id, ""),
+            original_path=i.original_path,
+            sha256=i.sha256,
+            reason=i.reason,
+            verdict=i.verdict,
+            status=i.status,
+            quarantined_at=i.quarantined_at,
+            restored_at=i.restored_at,
+        )
+        for i in items
+    ]
+
+
+@router.post("/quarantine/{item_id}/restore")
+async def restore_quarantine(item_id: str, db: Session = Depends(get_db)):
+    """Queue a restore command; the agent executes it on next check-in."""
+    item = db.get(QuarantineItem, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Quarantine item not found")
+    if item.status == "restored":
+        raise HTTPException(status_code=409, detail="Item already restored")
+    device = db.get(Device, item.device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    cmds = list(device.pending_commands or [])
+    cmds.append({"command": "restore_quarantine", "id": item.id})
+    device.pending_commands = cmds
+    item.status = "restore_requested"
+    db.add(
+        ThreatEvent(
+            device_id=device.id,
+            source="quarantine",
+            severity="info",
+            action="restore_requested",
+            summary=f"Admin requested restore of {item.original_path} on {device.hostname}",
+            details={"id": item.id, "sha256": item.sha256},
+        )
+    )
+    db.commit()
+    await hub.broadcast({"type": "quarantine_updated", "id": item.id, "status": item.status})
+    return {"id": item.id, "status": item.status}
 
 
 @router.get("/blocklist")

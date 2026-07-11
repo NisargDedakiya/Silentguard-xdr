@@ -35,7 +35,35 @@ Built from the SilentGuard XDR project proposal (semester MVP scope).
    stores the threat timeline, and serves the Next.js dashboard with live
    WebSocket updates, fleet blocklist pushes, and one-click remote isolation.
 
-## Quick start (demo)
+## Quick start — one command (Docker Compose)
+
+The fastest way to bring up the **server + dashboard + Postgres** for a demo:
+
+```bash
+docker compose up --build
+```
+
+- Dashboard: http://localhost:3000 (sign in with `silentguard-admin-demo`)
+- API: http://localhost:8000
+- Postgres is provisioned automatically; data persists in the `pg-data` volume.
+
+Override defaults with env vars (or a `.env` file next to `docker-compose.yml`):
+`SG_ADMIN_TOKEN`, `SG_ENROLL_TOKEN`, `POSTGRES_USER/PASSWORD/DB`,
+`NEXT_PUBLIC_API_URL`.
+
+**SQLite fallback** (no Postgres):
+
+```bash
+DATABASE_URL="sqlite:////data/silentguard.db" docker compose up --build server dashboard
+```
+
+The SQLite file lives on the `sqlite-data` volume.
+
+> The **agent runs natively**, not in Docker — it needs host OS access
+> (process list, firewall, hosts file). Start it as shown in step 2 below,
+> pointing `SG_SERVER_URL` at `http://127.0.0.1:8000`.
+
+## Manual setup (development)
 
 ### 1. Backend
 

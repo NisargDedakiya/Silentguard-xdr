@@ -1,0 +1,56 @@
+# SilentGuard XDR — one-command demo stack (server + dashboard + Postgres).
+#
+#   docker compose up --build
+#
+# The agent is NOT containerized: it needs host OS access (process list,
+# firewall, hosts file) and runs natively — see README.
+#
+# Database selection:
+#   * Default: the `db` Postgres service (DATABASE_URL below points at it).
+#   * SQLite fallback: run `docker compose up server dashboard` (omit `db`)
+#     and set DATABASE_URL="" — the server then defaults to a SQLite file on
+#     the `sqlite-data` volume. See README "SQLite fallback".
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-silentguard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-silentguard}
+      POSTGRES_DB: ${POSTGRES_DB:-silentguard}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-silentguard}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build: ./server
+    environment:
+      # When DATABASE_URL is unset/empty the server falls back to SQLite.
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://${POSTGRES_USER:-silentguard}:${POSTGRES_PASSWORD:-silentguard}@db:5432/${POSTGRES_DB:-silentguard}}
+      SG_ADMIN_TOKEN: ${SG_ADMIN_TOKEN:-silentguard-admin-demo}
+      SG_ENROLL_TOKEN: ${SG_ENROLL_TOKEN:-silentguard-enroll-demo}
+    volumes:
+      - sqlite-data:/data  # used only in the SQLite fallback
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://127.0.0.1:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - server
+
+volumes:
+  pg-data:
+  sqlite-data:

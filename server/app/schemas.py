@@ -60,8 +60,33 @@ class EventOut(BaseModel):
     action: str
     summary: str
     details: dict[str, Any]
+    # MITRE ATT&CK technique evidenced by this event, e.g.
+    # {"id": "T1059", "name": "Command and Scripting Interpreter", "url": ...}
+    mitre: Optional[dict[str, str]] = None
 
 
 class BlocklistAdd(BaseModel):
     kind: str  # domain | process | port
     value: str
+
+
+class AuditOut(BaseModel):
+    id: int
+    timestamp: datetime.datetime
+    actor: str  # admin token fingerprint
+    action: str
+    target: str
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class QuarantineOut(BaseModel):
+    id: str
+    device_id: str
+    hostname: str = ""
+    original_path: str
+    sha256: str
+    reason: str
+    verdict: str
+    status: str
+    quarantined_at: datetime.datetime
+    restored_at: Optional[datetime.datetime] = None

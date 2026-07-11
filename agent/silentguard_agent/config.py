@@ -13,6 +13,11 @@ from pathlib import Path
 
 STATE_DIR = Path(os.environ.get("SG_STATE_DIR", Path.home() / ".silentguard"))
 STATE_FILE = STATE_DIR / "agent_state.json"
+REPUTATION_FILE = STATE_DIR / "reputation.json"
+
+# SHA-256 of the EICAR standard antivirus test file — a safe, universally
+# recognized "known bad" for demos and tests.
+EICAR_SHA256 = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
 
 
 @dataclass
@@ -41,6 +46,32 @@ class AgentConfig:
         "cupsd", "NetworkManager", "systemd-resolve", "systemd-resolved",
     })
     dry_run: bool = os.environ.get("SG_DRY_RUN", "0") == "1"
+    # File hash reputation: known-bad executable hashes and a user-maintained
+    # allowlist of hashes that must never be quarantined. Extended at startup
+    # from REPUTATION_FILE ({"known_bad": [...], "allowlist": [...]}).
+    known_bad_hashes: set = field(default_factory=lambda: {EICAR_SHA256})
+    allowlisted_hashes: set = field(default_factory=set)
+    # Directories watched by the file-drop monitor for newly dropped payloads.
+    file_drop_dirs: list = field(default_factory=lambda: [
+        p for p in ("/tmp", str(Path.home() / "Downloads")) if Path(p).is_dir()
+    ])
+    # USB policy: when True, newly inserted USB mass-storage devices are
+    # blocked (best effort) instead of just reported.
+    block_usb_storage: bool = os.environ.get("SG_BLOCK_USB_STORAGE", "0") == "1"
+
+    def __post_init__(self) -> None:
+        rep = load_reputation()
+        self.known_bad_hashes.update(rep.get("known_bad", []))
+        self.allowlisted_hashes.update(rep.get("allowlist", []))
+
+
+def load_reputation() -> dict:
+    """User-maintained hash reputation extras: {"known_bad": [...], "allowlist": [...]}."""
+    try:
+        data = json.loads(REPUTATION_FILE.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 def load_state() -> dict:

@@ -5,6 +5,7 @@ Agents authenticate with a per-device API key issued at enrollment
 admin token (X-Admin-Token header). Both are simple bearer-style secrets for
 the MVP; the enterprise roadmap replaces the admin token with RBAC/SSO/MFA.
 """
+import hashlib
 import os
 import secrets
 
@@ -18,9 +19,16 @@ ENROLL_TOKEN = os.environ.get("SG_ENROLL_TOKEN", "silentguard-enroll-demo")
 ADMIN_TOKEN = os.environ.get("SG_ADMIN_TOKEN", "silentguard-admin-demo")
 
 
-def require_admin(x_admin_token: str = Header(default="")) -> None:
+def token_fingerprint(token: str) -> str:
+    """Short, non-reversible identifier for the acting credential — safe to
+    store in audit logs without leaking the token itself."""
+    return hashlib.sha256(token.encode()).hexdigest()[:12]
+
+
+def require_admin(x_admin_token: str = Header(default="")) -> str:
     if not secrets.compare_digest(x_admin_token, ADMIN_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid admin token")
+    return token_fingerprint(x_admin_token)
 
 
 def require_agent(

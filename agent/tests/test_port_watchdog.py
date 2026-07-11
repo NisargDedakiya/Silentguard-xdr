@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import psutil
 
 from silentguard_agent.monitors.port_watchdog import PortWatchdog
+from silentguard_agent.quarantine import QuarantineManager
 
 
 def fake_proc(pid, name):
@@ -69,6 +70,44 @@ def test_known_listener_not_reported_twice(config, telemetry):
     run_scan(wd, [], conns, proc_lookup={505: proc})
     run_scan(wd, [], conns, proc_lookup={505: proc})
     assert len(telemetry.by_action("detected")) == 1
+
+
+def test_killed_process_executable_is_quarantined(config, telemetry, tmp_path):
+    config.dry_run = False  # kills hit MagicMocks; quarantine hits tmp files only
+    exe = tmp_path / "mimikatz.exe"
+    exe.write_bytes(b"fake payload")
+    qm = QuarantineManager(config, quarantine_dir=tmp_path / "qdir")
+    wd = PortWatchdog(config, telemetry, qm)
+    proc = fake_proc(101, "mimikatz.exe")
+    proc.exe.return_value = str(exe)
+    run_scan(wd, [proc], [])
+    assert len(telemetry.by_action("killed")) == 1
+    quarantined = telemetry.by_action("quarantined")
+    assert len(quarantined) == 1
+    assert quarantined[0]["source"] == "quarantine"
+    import hashlib
+
+    assert quarantined[0]["details"]["sha256"] == hashlib.sha256(b"fake payload").hexdigest()
+    assert not exe.exists()  # moved, not deleted
+    assert (tmp_path / "qdir" / quarantined[0]["details"]["stored_name"]).exists()
+
+
+def test_allowlisted_hash_not_quarantined(config, telemetry, tmp_path):
+    config.dry_run = False
+    exe = tmp_path / "nc.exe"
+    exe.write_bytes(b"legit tool")
+    import hashlib
+
+    config.allowlisted_hashes.add(hashlib.sha256(b"legit tool").hexdigest())
+    qm = QuarantineManager(config, quarantine_dir=tmp_path / "qdir")
+    wd = PortWatchdog(config, telemetry, qm)
+    proc = fake_proc(102, "nc.exe")
+    proc.exe.return_value = str(exe)
+    run_scan(wd, [proc], [])
+    assert len(telemetry.by_action("killed")) == 1  # process still killed
+    assert telemetry.by_action("quarantined") == []
+    assert len(telemetry.by_action("skipped_allowlisted")) == 1
+    assert exe.exists()  # file left in place
 
 
 def test_non_listening_connections_ignored(config, telemetry):

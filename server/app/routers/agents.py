@@ -6,11 +6,41 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import schemas
+from .. import alerting, schemas
 from ..auth import ENROLL_TOKEN, require_agent
 from ..database import get_db
-from ..models import BlocklistEntry, Device, ThreatEvent, utcnow
+from ..mitre import technique_for
+from ..models import BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
 from ..ws import hub
+
+
+def _sync_quarantine(db: Session, device: Device, ev: schemas.TelemetryEvent) -> None:
+    """Mirror agent quarantine events into the fleet-wide quarantine table."""
+    details = ev.details or {}
+    qid = details.get("id")
+    if not qid:
+        return
+    if ev.action == "quarantined":
+        if db.get(QuarantineItem, qid) is None:
+            db.add(
+                QuarantineItem(
+                    id=qid,
+                    device_id=device.id,
+                    original_path=details.get("original_path", ""),
+                    sha256=details.get("sha256") or "",
+                    reason=details.get("reason", ""),
+                    verdict=details.get("verdict", "unknown"),
+                    status="quarantined",
+                )
+            )
+    elif ev.action in ("restored", "restore_failed"):
+        item = db.get(QuarantineItem, qid)
+        if item is not None:
+            if ev.action == "restored":
+                item.status = "restored"
+                item.restored_at = utcnow()
+            else:
+                item.status = "quarantined"  # restore failed → still quarantined
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -55,6 +85,8 @@ async def telemetry(
             device.stopped = True
         elif ev.source == "agent" and ev.action == "started":
             device.stopped = False
+        if ev.source in ("quarantine", "file_drop"):
+            _sync_quarantine(db, device, ev)
 
         row = ThreatEvent(
             device_id=device.id,
@@ -69,20 +101,21 @@ async def telemetry(
         stored.append(row)
     db.commit()
     for row in stored:
-        await hub.broadcast(
-            {
-                "type": "threat_event",
-                "id": row.id,
-                "device_id": device.id,
-                "hostname": device.hostname,
-                "timestamp": row.timestamp,
-                "source": row.source,
-                "severity": row.severity,
-                "action": row.action,
-                "summary": row.summary,
-                "details": row.details,
-            }
-        )
+        payload = {
+            "type": "threat_event",
+            "id": row.id,
+            "device_id": device.id,
+            "hostname": device.hostname,
+            "timestamp": row.timestamp,
+            "source": row.source,
+            "severity": row.severity,
+            "action": row.action,
+            "summary": row.summary,
+            "details": row.details,
+            "mitre": technique_for(row.source, row.action),
+        }
+        await hub.broadcast(payload)
+        await alerting.notify_critical(payload)
     return {"accepted": len(stored)}
 
 

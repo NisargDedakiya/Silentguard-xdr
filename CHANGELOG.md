@@ -44,8 +44,16 @@ MVP toward an enterprise XDR platform following the plan in
   (+2) asserting migrations match the ORM models and downgrade cleanly. New
   dependency `alembic>=1.13`; docs in `docs/migrations.md`.
 
-**Backward compatibility (M1 + M2):** No API routes, request/response schemas,
-or WebSocket events changed. The SQLite demo still auto-creates its schema with
-no migration step; only production backends require `alembic upgrade head`,
-which the Compose entrypoint runs automatically. Suite: **59 server + 33 agent
-= 92 passing.**
+- **M3 — Service layer + shared utils (refactor, behavior-preserving):** New
+  `app/utils/time.py` (`aware_utc`) replaces three drifted `_aware` copies
+  (`scoring.py`, `monitor.py`, `admin.py`). New `app/services/events.py`
+  centralizes threat-event serialization (`broadcast_payload`, `event_out`) with
+  MITRE tagging attached in one place — previously hand-built in `agents.py`,
+  `monitor.py`, and `admin.py`. Removed now-dead imports. Added
+  `tests/test_services.py` (+6). WebSocket/REST payloads are byte-identical.
+
+**Backward compatibility (M1–M3):** No API routes, request/response schemas, or
+WebSocket events changed. The SQLite demo still auto-creates its schema with no
+migration step; only production backends require `alembic upgrade head`, which
+the Compose entrypoint runs automatically. Suite: **65 server + 33 agent = 98
+passing.**

@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 from .. import alerting, schemas
 from ..auth import require_admin
 from ..database import get_db
-from ..mitre import technique_for
 from ..models import AuditLogEntry, BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
 from ..scoring import compute_score, compute_scores
+from ..services import events
+from ..utils.time import aware_utc
 from ..ws import hub
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -24,9 +25,7 @@ def _audit(db: Session, actor: str, action: str, target: str, details: dict | No
 
 
 def _device_out(d: Device, score: dict) -> schemas.DeviceOut:
-    last_seen = d.last_seen
-    if last_seen.tzinfo is None:
-        last_seen = last_seen.replace(tzinfo=datetime.timezone.utc)
+    last_seen = aware_utc(d.last_seen)
     return schemas.DeviceOut(
         id=d.id,
         hostname=d.hostname,
@@ -54,21 +53,7 @@ def list_events(limit: int = 100, device_id: str | None = None, db: Session = De
     if device_id:
         q = q.filter(ThreatEvent.device_id == device_id)
     rows = q.limit(min(limit, 500)).all()
-    return [
-        schemas.EventOut(
-            id=r.id,
-            device_id=r.device_id,
-            hostname=r.device.hostname if r.device else "",
-            timestamp=r.timestamp,
-            source=r.source,
-            severity=r.severity,
-            action=r.action,
-            summary=r.summary,
-            details=r.details or {},
-            mitre=technique_for(r.source, r.action),
-        )
-        for r in rows
-    ]
+    return [events.event_out(r, r.device.hostname if r.device else "") for r in rows]
 
 
 async def _set_isolation(device_id: str, isolated: bool, db: Session, actor: str):

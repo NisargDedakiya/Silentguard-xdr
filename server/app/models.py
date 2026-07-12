@@ -135,6 +135,28 @@ class AuditLogEntry(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class Detection(Base):
+    """A behavioral-detection-engine finding (M8): a rule fired on a telemetry
+    event. Carries the weighted risk score, ATT&CK technique, and triage
+    status."""
+
+    __tablename__ = "detections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), index=True)
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("threat_events.id"), nullable=True)
+    rule_id: Mapped[str] = mapped_column(String(64), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    severity: Mapped[str] = mapped_column(String(16))  # low|medium|high|critical
+    risk_score: Mapped[int] = mapped_column(Integer, default=0)
+    technique_id: Mapped[str] = mapped_column(String(16), default="")
+    technique_name: Mapped[str] = mapped_column(String(128), default="")
+    status: Mapped[str] = mapped_column(String(16), default="new", index=True)  # new|acknowledged|resolved
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
 class BlocklistEntry(Base):
     __tablename__ = "blocklist"
     # Uniqueness is per-organization: the same value may be blocked in several

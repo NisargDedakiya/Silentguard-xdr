@@ -103,6 +103,21 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DetectionOut(BaseModel):
+    id: int
+    device_id: str
+    hostname: str = ""
+    rule_id: str
+    name: str
+    severity: str
+    risk_score: int
+    technique_id: str
+    technique_name: str
+    status: str
+    created_at: datetime.datetime
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 class AuditOut(BaseModel):
     id: int
     timestamp: datetime.datetime

@@ -87,9 +87,22 @@ MVP toward an enterprise XDR platform following the plan in
   receive only their org's blocklist; blocklist uniqueness is now per-org.
   Tests: +7 (`tests/test_tenancy.py`). Docs: `docs/multi-tenancy.md`.
 
-**Backward compatibility (M1–M6):** No existing API route, request/response
-schema, or WebSocket event changed; the admin API keeps accepting the legacy
-token (full super-admin, cross-org). The SQLite demo still auto-creates its
-schema; production backends run `alembic upgrade head` (Compose does this
-automatically) and existing data is backfilled into the default org. Suite:
-**94 server + 33 agent = 127 passing.**
+- **M8 — Behavioral detection engine:** A rule-based engine
+  (`app/detection/`) evaluates ingested telemetry and produces org-scoped
+  **detections** with a Low/Medium/High/Critical weighted risk model, ATT&CK
+  technique, and configurable responses. Seed rules: reverse shell (T1059),
+  suspicious listener (T1571), PowerShell abuse (T1059.001), encoded command
+  (T1027), LOLBin execution (T1218) — the first two fire on today's telemetry.
+  New `detections` table (migration `1e6ea9d784c9`), triage API
+  (`GET /api/admin/detections`, `POST …/{id}/ack|resolve`) behind a new
+  `write:detections` permission, and a `detection` WebSocket event. Responses:
+  `alert` (critical → M5 alerting) always on; `isolate` gated by
+  `SG_DETECTION_AUTO_ISOLATE` (off by default). The telemetry response gained an
+  additive `detections` count. Tests: +16 (`tests/test_detection.py`). Docs:
+  `docs/detection-engine.md`.
+
+**Backward compatibility (M1–M8):** No existing API route or WebSocket event was
+removed; the telemetry response is additively extended (`detections` count), and
+the admin API keeps accepting the legacy token. The SQLite demo still
+auto-creates its schema; production backends run `alembic upgrade head`. Suite:
+**106 server + 33 agent = 139 passing.**

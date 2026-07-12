@@ -16,6 +16,7 @@ class Permission(str, Enum):
     WRITE_ISOLATION = "write:isolation"    # isolate / release a device
     WRITE_BLOCKLIST = "write:blocklist"    # add / remove blocklist entries
     WRITE_QUARANTINE = "write:quarantine"  # restore a quarantined file
+    WRITE_DETECTIONS = "write:detections"  # acknowledge / resolve detections
     MANAGE_USERS = "manage:users"          # create / list / disable users
 
 
@@ -25,12 +26,14 @@ _RESPOND = frozenset(
     {Permission.WRITE_ISOLATION, Permission.WRITE_BLOCKLIST, Permission.WRITE_QUARANTINE}
 )
 
+_TRIAGE = frozenset({Permission.WRITE_DETECTIONS})
+
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.SUPER_ADMIN: _ALL,
-    Role.SOC_MANAGER: _READ | _RESPOND,
-    Role.ANALYST: _READ,
-    Role.THREAT_HUNTER: _READ,
-    Role.RESPONDER: frozenset({Permission.READ_FLEET}) | _RESPOND,
+    Role.SOC_MANAGER: _READ | _RESPOND | _TRIAGE,
+    Role.ANALYST: _READ | _TRIAGE,
+    Role.THREAT_HUNTER: _READ | _TRIAGE,
+    Role.RESPONDER: frozenset({Permission.READ_FLEET}) | _RESPOND | _TRIAGE,
     Role.AUDITOR: _READ,
     Role.READ_ONLY: frozenset({Permission.READ_FLEET}),
 }

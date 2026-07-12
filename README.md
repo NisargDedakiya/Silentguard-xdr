@@ -215,6 +215,14 @@ Test dependencies (pytest, pytest-asyncio, httpx2) ship in
 `server/requirements.txt`, so a fresh `pip install -r requirements.txt`
 is all that's needed before `pytest -q`.
 
+## Behavioral detection engine
+
+Ingested telemetry is evaluated by a rule-based engine that produces scored
+**detections** (Low/Medium/High/Critical) tagged with ATT&CK techniques and
+configurable responses. Seed rules cover reverse shells, suspicious listeners,
+PowerShell abuse, encoded commands, and LOLBins. Triage them at
+`/api/admin/detections`. See [`docs/detection-engine.md`](docs/detection-engine.md).
+
 ## Configuration & observability
 
 All backend settings are centralized in `server/app/core/config.py` (typed,

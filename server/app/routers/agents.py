@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from .. import alerting, schemas
 from ..auth import ENROLL_TOKEN, require_agent
 from ..database import get_db
+from ..detection import engine as detection_engine
 from ..models import DEFAULT_ORG_ID, BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
 from ..services import events
 from ..ws import hub
@@ -103,11 +104,22 @@ async def telemetry(
         db.add(row)
         stored.append(row)
     db.commit()
+
+    # Run the behavioral detection engine over the freshly stored events.
+    detections = []
+    for row in stored:
+        detections.extend(detection_engine.evaluate_event(db, device, row))
+    if detections:
+        db.commit()
+
     for row in stored:
         payload = events.broadcast_payload(row, device.hostname)
         await hub.broadcast(payload)
         await alerting.notify_critical(payload)
-    return {"accepted": len(stored)}
+    for det in detections:
+        await hub.broadcast(detection_engine.detection_payload(det, device.hostname))
+        await detection_engine.dispatch_responses(db, det, device)
+    return {"accepted": len(stored), "detections": len(detections)}
 
 
 @router.get("/checkin", response_model=schemas.CheckinResponse)

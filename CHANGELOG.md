@@ -200,8 +200,15 @@ MVP toward an enterprise XDR platform following the plan in
   (unit/api/integration/security), `pytest-cov` added as a test dep. Server line
   coverage ~92%. Docs: `docs/testing.md`.
 
-**Backward compatibility (M1–M18, plus M7/M21/M22):** No existing API route or
+- **M23 — Documentation automation:** Scripts to export the OpenAPI spec
+  (`scripts/export_openapi.py`) and generate DB schema docs from the models
+  (`scripts/generate_schema_docs.py` → `docs/schema.md`, 17 tables). New
+  `docs/architecture.md` (system diagram + module map), `docs/README.md` (index),
+  `docs/deployment.md`, `docs/upgrade-notes.md`; FastAPI app description for
+  `/docs`; `make docs` target. Tests: +3 (`tests/test_docs.py`).
+
+**Backward compatibility (M1–M18, plus M7/M21/M22/M23):** No existing API route or
 WebSocket event was removed; new endpoints and the check-in `policy` field are
 additive, and the admin API keeps accepting the legacy token. The SQLite demo
 still auto-creates its schema; production backends run `alembic upgrade head`.
-Suite: **185 server + 44 agent = 229 passing (server coverage ~92%).**
+Suite: **188 server + 44 agent = 232 passing (server coverage ~92%).**

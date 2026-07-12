@@ -95,7 +95,13 @@ async def lifespan(app: FastAPI):
         log.info("service stopped")
 
 
-app = FastAPI(title="SilentGuard XDR", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="SilentGuard XDR",
+    version="0.1.0",
+    description="Autonomous endpoint detection & response platform — Command "
+                "Matrix API. Interactive docs at /docs; schema at /openapi.json.",
+    lifespan=lifespan,
+)
 
 # Middleware runs in reverse registration order for requests; register the
 # request-context (correlation id + access log) last so it wraps everything.

@@ -1,5 +1,5 @@
 # SilentGuard XDR — developer tasks.
-.PHONY: help install test test-server test-agent coverage migrate sbom
+.PHONY: help install test test-server test-agent coverage migrate sbom docs
 
 help:
 	@echo "Targets:"
@@ -32,3 +32,9 @@ migrate:
 sbom:
 	python scripts/generate_sbom.py > sbom.json
 	@echo "wrote sbom.json"
+
+docs:
+	python scripts/generate_schema_docs.py > docs/schema.md
+	cd server && python ../scripts/export_openapi.py > openapi.json
+	python scripts/generate_sbom.py > sbom.json
+	@echo "regenerated docs/schema.md, server/openapi.json, sbom.json"

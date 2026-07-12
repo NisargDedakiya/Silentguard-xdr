@@ -295,6 +295,26 @@ class DetectionExplanationOut(BaseModel):
     generated_at: str
 
 
+class ComplianceControl(BaseModel):
+    id: str
+    title: str
+    status: str  # pass | warn | fail
+    detail: str
+
+
+class ComplianceReportOut(BaseModel):
+    """Executive/compliance posture report (v1.4)."""
+    generated_at: str
+    window_days: int
+    org_id: Optional[str] = None
+    score: int
+    controls_summary: dict[str, int]
+    fleet: dict[str, Any]
+    detections: dict[str, Any]
+    intel: dict[str, Any]
+    controls: list[ComplianceControl]
+
+
 class AuditOut(BaseModel):
     id: int
     timestamp: datetime.datetime

@@ -6,6 +6,19 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.4 — Compliance & executive reporting
+
+- **New `app/services/compliance.py` + `GET /api/admin/analytics/compliance-report`**
+  (`READ_AUDIT`, org-scoped): a single posture report — fleet health, detection
+  backlog, threat-intel coverage, and pass/warn/fail control checks with a
+  headline score (pass=full, warn=half, fail=none). Five configuration controls
+  (JWT secret, HSTS, token exposure, body-size guard, Sigma) plus three
+  data-driven controls (all endpoints reporting, no unresolved criticals, intel
+  content present), so the report reflects real operational posture.
+- **Schema:** `ComplianceReportOut` / `ComplianceControl`. **Tests:**
+  `server/tests/test_compliance.py` (structure/score, backlog fail→pass on
+  resolve, intel control, RBAC). **Docs:** `docs/compliance-reporting.md`.
+
 ### v1.3 — YARA file scanning
 
 - **New `agent/silentguard_agent/monitors/yara_scanner.py`:** scans

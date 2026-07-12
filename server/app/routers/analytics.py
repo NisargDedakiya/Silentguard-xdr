@@ -2,14 +2,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from .. import schemas
 from ..auth import Principal, require_permission
 from ..core.permissions import Permission
 from ..database import get_db
-from ..services import analytics
+from ..services import analytics, compliance
 
 router = APIRouter(prefix="/api/admin/analytics", tags=["analytics"])
 
 ReadFleet = Depends(require_permission(Permission.READ_FLEET))
+ReadAudit = Depends(require_permission(Permission.READ_AUDIT))
 
 
 @router.get("/summary")
@@ -32,6 +34,15 @@ def get_top_devices(limit: int = 10, db: Session = Depends(get_db),
 @router.get("/mitre-coverage")
 def get_mitre_coverage(db: Session = Depends(get_db), principal: Principal = ReadFleet):
     return analytics.mitre_coverage(db, principal)
+
+
+@router.get("/compliance-report", response_model=schemas.ComplianceReportOut)
+def get_compliance_report(days: int = 30, db: Session = Depends(get_db),
+                          principal: Principal = ReadAudit):
+    """Executive/compliance posture report (v1.4): fleet health, detection
+    backlog, threat-intel coverage, and pass/warn/fail control checks with a
+    headline score. Requires the audit-read permission."""
+    return compliance.build_compliance_report(db, principal, days)
 
 
 @router.get("/timeline")

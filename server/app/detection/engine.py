@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 from .. import alerting
 from ..core.config import settings
 from ..core.logging import get_logger
-from ..models import Detection, Device, ThreatEvent
+from ..models import Detection, Device, IntelRule, ThreatEvent
 from ..services import threat_intel
+from . import sigma
 from .rules import RULES_BY_ID, SEED_RULES, EventContext, Rule
 
 log = get_logger("silentguard.detection")
@@ -46,6 +47,45 @@ def evaluate_event(db: Session, device: Device, event: ThreatEvent) -> list[Dete
         detections.append(det)
 
     detections.extend(_evaluate_iocs(db, device, event))
+    detections.extend(_evaluate_sigma(db, device, event, ctx))
+    return detections
+
+
+def _evaluate_sigma(db: Session, device: Device, event: ThreatEvent,
+                    ctx: EventContext) -> list[Detection]:
+    """Evaluate operator-supplied Sigma rules against the event (v1.3)."""
+    if not settings.sigma_enabled:
+        return []
+    detections: list[Detection] = []
+    rows = (
+        db.query(IntelRule)
+        .filter(IntelRule.kind == "sigma", IntelRule.enabled.is_(True))
+        .filter((IntelRule.org_id == event.org_id) | (IntelRule.org_id.is_(None)))
+        .all()
+    )
+    for row in rows:
+        try:
+            compiled = sigma.compile_cached(row.content)
+            if not compiled.matches(ctx):
+                continue
+        except sigma.SigmaError as exc:
+            log.warning("skipping invalid sigma rule", extra={"rule": row.name, "error": str(exc)})
+            continue
+        except Exception:  # noqa: BLE001 — a broken rule must not drop telemetry
+            log.exception("sigma rule error", extra={"rule": row.name})
+            continue
+        from .rules import Severity, SEVERITY_SCORE
+        severity = compiled.severity
+        det = Detection(
+            org_id=event.org_id, device_id=device.id, event_id=event.id,
+            rule_id=f"sigma:{compiled.rule_id}", name=compiled.name,
+            severity=severity, risk_score=SEVERITY_SCORE[Severity(severity)],
+            technique_id=compiled.technique_id, technique_name=compiled.technique_name,
+            status="new",
+            details={"summary": event.summary, "sigma": row.name, "responses": ["alert"]},
+        )
+        db.add(det)
+        detections.append(det)
     return detections
 
 

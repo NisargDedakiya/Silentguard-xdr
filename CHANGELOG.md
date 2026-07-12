@@ -6,6 +6,26 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.3 — Sigma rule evaluation
+
+- **New `app/detection/sigma.py`:** compiles operator-supplied Sigma rules into
+  predicates over an `EventContext` and evaluates them in the detection engine.
+  Previously Sigma rules could be stored/distributed but never fired. Supported
+  subset: selections (mapping + keyword lists), field modifiers `contains` /
+  `startswith` / `endswith` / `re` / `all` / equality, `condition` with
+  `and` / `or` / `not` / parentheses and `N of them` / `all of them` /
+  `1 of prefix*`, `level` → severity, and `tags` → ATT&CK technique. Matching is
+  case-insensitive; unmapped fields never match (no false positives).
+- **Engine:** `_evaluate_sigma` runs enabled `kind="sigma"` intel rules
+  (org-scoped + global) per event, producing `Detection` rows with
+  `rule_id="sigma:<id>"`. Compilation is cached by content hash; a broken rule
+  is logged and skipped, never dropping telemetry. Gated by `SG_SIGMA_ENABLED`
+  (default on, inert until rules exist).
+- **Ingestion validation:** `POST /api/admin/intel/rules` now rejects an
+  uncompilable Sigma rule with `400` before it can reach the engine.
+- **Deps:** `pyyaml>=6.0`. **Tests:** `server/tests/test_sigma.py`.
+  **Docs:** `docs/sigma.md`.
+
 ### M15a — Signed agent updates
 
 - **New `agent/silentguard_agent/update_verifier.py`:** verifies the signature

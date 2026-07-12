@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # Detection engine: when enabled, a critical detection whose rule includes
     # the "isolate" response auto-isolates the device. Off by default (safe).
     detection_auto_isolate: bool = Field(default=False, alias="SG_DETECTION_AUTO_ISOLATE")
+    # Evaluate operator-supplied Sigma rules (kind="sigma" intel rules) against
+    # telemetry (v1.3). On by default but inert until Sigma rules are added.
+    sigma_enabled: bool = Field(default=True, alias="SG_SIGMA_ENABLED")
 
     # Password reset / email verification token lifetimes (seconds).
     reset_token_ttl_seconds: int = Field(default=3600, alias="SG_RESET_TTL")

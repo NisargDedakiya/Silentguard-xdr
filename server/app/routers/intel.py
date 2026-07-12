@@ -83,6 +83,12 @@ def create_rule(body: schemas.IntelRuleCreate, db: Session = Depends(get_db),
                 principal: Principal = ManageIntel):
     if body.kind not in ("yara", "sigma"):
         raise HTTPException(status_code=400, detail="kind must be yara or sigma")
+    if body.kind == "sigma":
+        from ..detection import sigma
+        try:
+            sigma.validate_sigma(body.content)
+        except sigma.SigmaError as exc:
+            raise HTTPException(status_code=400, detail=f"invalid Sigma rule: {exc}")
     row = IntelRule(org_id=owning_org(principal), kind=body.kind, name=body.name,
                     content=body.content, enabled=body.enabled)
     db.add(row)

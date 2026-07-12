@@ -10,6 +10,7 @@ python-multipart>=0.0.9
 # passes with no manual extras.
 pytest>=8.0
 pytest-asyncio>=0.23
+pytest-cov>=4.0
 httpx2>=2.0  # required by starlette's TestClient
 # Optional production extras:
 # psycopg2-binary  (PostgreSQL)

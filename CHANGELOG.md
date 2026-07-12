@@ -193,8 +193,15 @@ MVP toward an enterprise XDR platform following the plan in
   `docs/security-hardening.md`. (Documents existing SQLi/XSS/CSRF/command-
   injection posture from earlier modules.)
 
-**Backward compatibility (M1–M18, plus M7/M21):** No existing API route or
+- **M22 — Test tiers + CI:** GitHub Actions workflow (`.github/workflows/ci.yml`)
+  running the server suite with an 85% coverage gate + migration-parity check,
+  the agent suite, and SBOM generation on every push/PR. Root `Makefile`
+  (install/test/coverage/migrate/sbom), registered pytest tier markers
+  (unit/api/integration/security), `pytest-cov` added as a test dep. Server line
+  coverage ~92%. Docs: `docs/testing.md`.
+
+**Backward compatibility (M1–M18, plus M7/M21/M22):** No existing API route or
 WebSocket event was removed; new endpoints and the check-in `policy` field are
 additive, and the admin API keeps accepting the legacy token. The SQLite demo
 still auto-creates its schema; production backends run `alembic upgrade head`.
-Suite: **185 server + 44 agent = 229 passing.**
+Suite: **185 server + 44 agent = 229 passing (server coverage ~92%).**

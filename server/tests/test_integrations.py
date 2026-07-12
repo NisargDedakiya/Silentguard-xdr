@@ -19,6 +19,15 @@ def _reset_rate_limit():
     auth_service.reset_rate_limit()
 
 
+@pytest.fixture(autouse=True)
+def _resolve_dns():
+    """Integration destinations use example hostnames; resolve them to a public
+    IP so the SSRF guard (M21) treats them as valid, without real DNS."""
+    with patch("app.core.ssrf.socket.getaddrinfo",
+               lambda host, *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))]):
+        yield
+
+
 # -- formatters -----------------------------------------------------------
 def test_format_cef_escapes_and_headers():
     line = integ.format_cef({"severity": "critical", "name": "Reverse shell",

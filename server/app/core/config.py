@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     hsts_enabled: bool = Field(default=False, alias="SG_HSTS_ENABLED")
     # Reject request bodies larger than this many bytes (0 disables the check).
     max_request_bytes: int = Field(default=5 * 1024 * 1024, alias="SG_MAX_REQUEST_BYTES")
+    # SSRF: also block RFC1918 private targets for outbound integrations (leave
+    # off to permit internal SIEM endpoints).
+    block_private_integrations: bool = Field(default=False, alias="SG_BLOCK_PRIVATE_INTEGRATIONS")
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -182,8 +182,19 @@ MVP toward an enterprise XDR platform following the plan in
   only outside production (or with `SG_EXPOSE_AUTH_TOKENS`). Tests: +8
   (`tests/test_password_reset.py`). Docs: `docs/password-reset.md`.
 
-**Backward compatibility (M1–M18, plus M7):** No existing API route or WebSocket
-event was removed; new endpoints and the check-in `policy` field are additive,
-and the admin API keeps accepting the legacy token. The SQLite demo still
-auto-creates its schema; production backends run `alembic upgrade head`. Suite:
-**177 server + 44 agent = 221 passing.**
+- **M21 — Security hardening:** SSRF guard (`app/core/ssrf.py`) validates
+  admin-configured integration/webhook destinations before any request —
+  scheme-restricted, and rejecting loopback/link-local (incl. cloud metadata)/
+  multicast/reserved targets always, private ranges optionally
+  (`SG_BLOCK_PRIVATE_INTEGRATIONS`); enforced at integration creation. Startup
+  now warns on insecure production defaults (demo tokens, unset JWT secret,
+  `CORS=*`). New `scripts/generate_sbom.py` (CycloneDX SBOM, stdlib only) and
+  dependency-scan guidance. Tests: +8 (`tests/test_security.py`). Docs:
+  `docs/security-hardening.md`. (Documents existing SQLi/XSS/CSRF/command-
+  injection posture from earlier modules.)
+
+**Backward compatibility (M1–M18, plus M7/M21):** No existing API route or
+WebSocket event was removed; new endpoints and the check-in `policy` field are
+additive, and the admin API keeps accepting the legacy token. The SQLite demo
+still auto-creates its schema; production backends run `alembic upgrade head`.
+Suite: **185 server + 44 agent = 229 passing.**

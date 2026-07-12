@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..auth import Principal, require_permission
+from ..core.config import settings
 from ..core.permissions import Permission
+from ..core.ssrf import is_safe_host, is_safe_url
 from ..database import get_db
 from ..models import Integration, ThreatEvent
 from ..services import integrations as integ_service
@@ -17,6 +19,22 @@ ReadFleet = Depends(require_permission(Permission.READ_FLEET))
 ManageIntegrations = Depends(require_permission(Permission.MANAGE_INTEGRATIONS))
 
 VALID_KINDS = {"webhook", "slack", "teams", "discord", "splunk_hec", "syslog"}
+URL_KINDS = {"webhook", "slack", "teams", "discord", "splunk_hec"}
+
+
+def _validate_destination(kind: str, config: dict) -> None:
+    """Reject SSRF-unsafe destinations before an integration is stored."""
+    block_private = settings.block_private_integrations
+    if kind in URL_KINDS:
+        url = (config or {}).get("url", "")
+        if not is_safe_url(url, block_private=block_private):
+            raise HTTPException(status_code=400,
+                                detail="Destination URL is not allowed (SSRF protection)")
+    elif kind == "syslog":
+        host = (config or {}).get("host", "")
+        if host and not is_safe_host(host, block_private=block_private):
+            raise HTTPException(status_code=400,
+                                detail="Syslog host is not allowed (SSRF protection)")
 
 
 @router.get("/integrations", response_model=list[schemas.IntegrationOut])
@@ -29,6 +47,7 @@ def create_integration(body: schemas.IntegrationCreate, db: Session = Depends(ge
                        principal: Principal = ManageIntegrations):
     if body.kind not in VALID_KINDS:
         raise HTTPException(status_code=400, detail=f"kind must be one of {sorted(VALID_KINDS)}")
+    _validate_destination(body.kind, body.config)
     row = Integration(org_id=owning_org(principal), name=body.name, kind=body.kind,
                       config=body.config, min_severity=body.min_severity, enabled=body.enabled)
     db.add(row)

@@ -52,8 +52,26 @@ if settings.database_url.startswith("sqlite"):
 
 
 @contextlib.asynccontextmanager
+def _check_production_secrets() -> None:
+    """Warn loudly if a production deployment is running on demo defaults."""
+    if not settings.is_production:
+        return
+    problems = []
+    if settings.admin_token == "silentguard-admin-demo":
+        problems.append("SG_ADMIN_TOKEN is the demo default")
+    if settings.enroll_token == "silentguard-enroll-demo":
+        problems.append("SG_ENROLL_TOKEN is the demo default")
+    if not settings.jwt_secret:
+        problems.append("SG_JWT_SECRET is unset (derived from the admin token)")
+    if settings.cors_origin_list == ["*"]:
+        problems.append("SG_CORS_ORIGINS is '*'")
+    for p in problems:
+        log.warning("INSECURE PRODUCTION CONFIG: %s", p)
+
+
 async def lifespan(app: FastAPI):
     log.info("service starting", extra={"environment": settings.environment})
+    _check_production_secrets()
     with contextlib.suppress(Exception):
         db = SessionLocal()
         try:

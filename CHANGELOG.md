@@ -142,7 +142,15 @@ MVP toward an enterprise XDR platform following the plan in
   `delete_file` routes through quarantine (recoverable). Tests: +9 server, +6
   agent. Docs: `docs/response-framework.md`.
 
-**Backward compatibility (M1–M14):** No existing API route or WebSocket event was
+- **M17 — Visibility & analytics APIs:** New read-only, org-scoped
+  `/api/admin/analytics/*` endpoints (`app/services/analytics.py`): fleet
+  `summary`, `events-by-day` (threat trends/heatmap), `top-devices` by risk,
+  `mitre-coverage` (technique→count), category `timeline`
+  (usb/network/registry/process/quarantine), and best-effort `process-tree` from
+  pid/ppid. No schema change; aggregation done in Python for SQLite/Postgres
+  portability. Tests: +8 (`tests/test_analytics.py`). Docs: `docs/visibility.md`.
+
+**Backward compatibility (M1–M17):** No existing API route or WebSocket event was
 removed; new endpoints are additive and the admin API keeps accepting the legacy
 token. The SQLite demo still auto-creates its schema; production backends run
-`alembic upgrade head`. Suite: **146 server + 41 agent = 187 passing.**
+`alembic upgrade head`. Suite: **154 server + 41 agent = 195 passing.**

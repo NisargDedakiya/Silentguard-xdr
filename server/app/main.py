@@ -25,6 +25,7 @@ from .monitor import run_monitor_loop
 from .routers import (
     admin,
     agents,
+    analytics as analytics_router,
     auth as auth_router,
     detections as detections_router,
     intel as intel_router,
@@ -95,6 +96,7 @@ app.include_router(users_router.router)
 app.include_router(detections_router.router)
 app.include_router(intel_router.router)
 app.include_router(responses_router.router)
+app.include_router(analytics_router.router)
 app.include_router(agents.router)
 app.include_router(admin.router)
 

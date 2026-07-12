@@ -6,6 +6,18 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.3 — Registry autorun monitor
+
+- **New `agent/silentguard_agent/monitors/registry_monitor.py`:** watches the
+  Windows Run/RunOnce keys (HKLM+HKCU) and reports new/changed autorun entries —
+  the persistence data source the M9 `registry_persistence` rule was written for
+  (no new server rule needed; it fires T1547.001). Windows-only via stdlib
+  `winreg`; a clean no-op on Linux/macOS so one build ships everywhere.
+  Baseline-aware, wired into the poll loop. Toggle `SG_REGISTRY_ENABLED`.
+- **Tests:** `agent/tests/test_registry_monitor.py` (snapshot injection, no real
+  winreg) + a server ingestion → `registry_persistence` test.
+  **Docs:** `docs/registry-monitor.md`.
+
 ### v1.5 — Suricata IDS integration
 
 - **New `agent/silentguard_agent/monitors/suricata_monitor.py`:** tails a

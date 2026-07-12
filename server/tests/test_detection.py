@@ -156,6 +156,19 @@ def test_yara_match_telemetry_creates_detection(client, enrolled_device):
     assert hits[0]["technique_id"] == "T1105"
 
 
+def test_registry_autorun_creates_persistence_detection(client, enrolled_device):
+    """A registry autorun event from the agent fires the persistence rule."""
+    _emit(client, enrolled_device["headers"], source="registry_monitor",
+          action="autorun_added", severity="warning",
+          summary=r"Registry autorun added: HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\Evil -> C:\temp\evil.exe",
+          details={"key": r"HKCU\...\CurrentVersion\Run", "name": "Evil",
+                   "command_line": r"C:\temp\evil.exe"})
+    dets = client.get("/api/admin/detections", headers=ADMIN_HEADERS).json()
+    hits = [d for d in dets if d["rule_id"] == "registry_persistence"]
+    assert len(hits) == 1
+    assert hits[0]["technique_id"] == "T1547.001"
+
+
 def test_suricata_alert_creates_detection(client, enrolled_device):
     """A Suricata IDS alert forwarded by the agent creates a high detection."""
     _emit(client, enrolled_device["headers"], source="suricata", action="alert",

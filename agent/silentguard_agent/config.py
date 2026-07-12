@@ -82,6 +82,9 @@ class AgentConfig:
     # Suricata IDS integration (v1.5): tail an eve.json log and forward alerts.
     suricata_enabled: bool = os.environ.get("SG_SURICATA_ENABLED", "0") == "1"
     suricata_eve_path: str = os.environ.get("SG_SURICATA_EVE", "/var/log/suricata/eve.json")
+    # Registry autorun monitor (v1.3): Windows-only; watches Run/RunOnce keys.
+    # Active only on Windows; a no-op elsewhere regardless of this flag.
+    registry_enabled: bool = os.environ.get("SG_REGISTRY_ENABLED", "1") != "0"
 
     def __post_init__(self) -> None:
         rep = load_reputation()

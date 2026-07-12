@@ -7,6 +7,8 @@ sliding window; it moves to Redis in M20 for multi-worker correctness.
 """
 import collections
 import datetime
+import hashlib
+import secrets
 import threading
 
 from sqlalchemy.orm import Session
@@ -21,7 +23,8 @@ from ..core.security import (
     hash_password,
     verify_password,
 )
-from ..models import DEFAULT_ORG_ID, RefreshToken, User, utcnow
+from ..models import DEFAULT_ORG_ID, RefreshToken, User, UserToken, utcnow
+from ..services import email as email_service
 from ..utils.time import aware_utc
 
 log = get_logger("silentguard.auth")
@@ -161,6 +164,81 @@ def revoke_refresh_token(db: Session, refresh_token: str) -> None:
     if record is not None and not record.revoked:
         record.revoked = True
         db.commit()
+
+
+# -- email verification + password reset (M7) -----------------------------
+def _hash_token(raw: str) -> str:
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _issue_token(db: Session, user: User, purpose: str, ttl_seconds: int) -> str:
+    raw = secrets.token_urlsafe(32)
+    # Invalidate any outstanding unused tokens of the same purpose.
+    for old in db.query(UserToken).filter(
+            UserToken.user_id == user.id, UserToken.purpose == purpose,
+            UserToken.used_at.is_(None)).all():
+        old.used_at = utcnow()
+    db.add(UserToken(user_id=user.id, purpose=purpose, token_hash=_hash_token(raw),
+                     expires_at=utcnow() + datetime.timedelta(seconds=ttl_seconds)))
+    db.commit()
+    return raw
+
+
+def _consume_token(db: Session, raw: str, purpose: str) -> User | None:
+    row = (
+        db.query(UserToken)
+        .filter(UserToken.token_hash == _hash_token(raw), UserToken.purpose == purpose,
+                UserToken.used_at.is_(None))
+        .first()
+    )
+    if row is None or aware_utc(row.expires_at) <= utcnow():
+        return None
+    row.used_at = utcnow()
+    return db.get(User, row.user_id)
+
+
+def request_email_verification(db: Session, user: User) -> str:
+    raw = _issue_token(db, user, "email_verify", settings.verify_token_ttl_seconds)
+    email_service.send_email(user.email, "Verify your SilentGuard account",
+                             f"Your email verification token: {raw}")
+    return raw
+
+
+def verify_email(db: Session, raw: str) -> bool:
+    user = _consume_token(db, raw, "email_verify")
+    if user is None:
+        return False
+    user.email_verified = True
+    db.commit()
+    return True
+
+
+def request_password_reset(db: Session, email: str) -> str | None:
+    """Issue a reset token. Returns the raw token (for non-prod exposure) or
+    None if the email is unknown — callers must not reveal which."""
+    user = db.query(User).filter(User.email == email.strip().lower()).first()
+    if user is None:
+        return None
+    raw = _issue_token(db, user, "password_reset", settings.reset_token_ttl_seconds)
+    email_service.send_email(user.email, "SilentGuard password reset",
+                             f"Your password reset token: {raw}")
+    return raw
+
+
+def reset_password(db: Session, raw: str, new_password: str) -> bool:
+    validate_password(new_password)
+    user = _consume_token(db, raw, "password_reset")
+    if user is None:
+        return False
+    user.hashed_password = hash_password(new_password)
+    user.failed_login_count = 0
+    user.locked_until = None
+    # Revoke all refresh sessions on password change.
+    for rt in db.query(RefreshToken).filter(RefreshToken.user_id == user.id,
+                                            RefreshToken.revoked.is_(False)).all():
+        rt.revoked = True
+    db.commit()
+    return True
 
 
 def maybe_bootstrap_admin(db: Session) -> None:

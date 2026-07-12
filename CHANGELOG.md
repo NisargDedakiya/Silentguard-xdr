@@ -172,8 +172,18 @@ MVP toward an enterprise XDR platform following the plan in
   placeholder: enrollment returns 402 at the org device cap. Tests: +6 server,
   +3 agent. Docs: `docs/policy-engine.md`.
 
-**Backward compatibility (M1–M18):** No existing API route or WebSocket event was
-removed; new endpoints and the check-in `policy` field are additive, and the
-admin API keeps accepting the legacy token. The SQLite demo still auto-creates
-its schema; production backends run `alembic upgrade head`. Suite: **169 server
-+ 44 agent = 213 passing.**
+- **M7 — Password reset + email verification:** New `user_tokens` table and
+  `users.email_verified` (migration `056e91da83c2`, server-defaulted). Public
+  `/api/auth/password-reset/{request,confirm}` and
+  `/api/auth/verify-email/{request,confirm}` endpoints with single-use,
+  SHA-256-hashed, expiring tokens; no account enumeration; reset revokes all
+  refresh sessions and enforces the password policy. Best-effort email via new
+  `app/services/email.py` (reuses `SG_SMTP_*`). Tokens are echoed in responses
+  only outside production (or with `SG_EXPOSE_AUTH_TOKENS`). Tests: +8
+  (`tests/test_password_reset.py`). Docs: `docs/password-reset.md`.
+
+**Backward compatibility (M1–M18, plus M7):** No existing API route or WebSocket
+event was removed; new endpoints and the check-in `policy` field are additive,
+and the admin API keeps accepting the legacy token. The SQLite demo still
+auto-creates its schema; production backends run `alembic upgrade head`. Suite:
+**177 server + 44 agent = 221 passing.**

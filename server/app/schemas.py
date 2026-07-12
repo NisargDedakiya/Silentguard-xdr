@@ -123,6 +123,19 @@ class TokenResponse(BaseModel):
     expires_in: int
 
 
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
+
+class EmailVerifyRequest(BaseModel):
+    token: str
+
+
 class UserCreate(BaseModel):
     email: str
     password: str

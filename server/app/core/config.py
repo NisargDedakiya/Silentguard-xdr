@@ -66,6 +66,13 @@ class Settings(BaseSettings):
     # the "isolate" response auto-isolates the device. Off by default (safe).
     detection_auto_isolate: bool = Field(default=False, alias="SG_DETECTION_AUTO_ISOLATE")
 
+    # Password reset / email verification token lifetimes (seconds).
+    reset_token_ttl_seconds: int = Field(default=3600, alias="SG_RESET_TTL")
+    verify_token_ttl_seconds: int = Field(default=86400, alias="SG_VERIFY_TTL")
+    # Expose reset/verify tokens in API responses (dev convenience). Defaults to
+    # true only in non-production so tests and local dev don't need a mailbox.
+    expose_auth_tokens: bool = Field(default=False, alias="SG_EXPOSE_AUTH_TOKENS")
+
     # Optional bootstrap super-admin, created on startup if no users exist.
     bootstrap_admin_email: str = Field(default="", alias="SG_BOOTSTRAP_ADMIN_EMAIL")
     bootstrap_admin_password: str = Field(default="", alias="SG_BOOTSTRAP_ADMIN_PASSWORD")
@@ -100,6 +107,12 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment.lower() in ("prod", "production")
+
+    @property
+    def should_expose_tokens(self) -> bool:
+        """Return reset/verify tokens in API responses outside production (dev
+        convenience) or when explicitly enabled."""
+        return self.expose_auth_tokens or not self.is_production
 
 
 @lru_cache

@@ -9,6 +9,8 @@ import os
 
 import psutil
 
+from .update_verifier import verify_update
+
 log = logging.getLogger("silentguard.response")
 
 
@@ -74,12 +76,37 @@ def remote_scan(cmd, telemetry, config, report):
     report(action_id, "ok", process_count=proc_count)
 
 
-def remote_update(cmd, telemetry, report):
-    """Acknowledge an update request. Real package delivery is out of scope
-    (deferred agent auto-update); this records the intent."""
+def remote_update(cmd, telemetry, config, report):
+    """Handle an update request (M15a). When the command carries an update
+    manifest (``url``/``sha256``) or a signature, it MUST verify against the
+    provisioned trust key before it is honored — a compromised channel cannot
+    push arbitrary code. A version-only acknowledgement (no manifest) keeps the
+    legacy best-effort behavior. Real package delivery remains deferred; this
+    records verified intent."""
     action_id = cmd.get("action_id")
     target = cmd.get("version", "latest")
+    is_manifest = bool(cmd.get("url") or cmd.get("sha256") or cmd.get("signature"))
+
+    if is_manifest:
+        ok, reason = verify_update(cmd, config)
+        if not ok:
+            telemetry.emit("response", "update_rejected",
+                           f"Agent update to {target} rejected: {reason}",
+                           severity="warning",
+                           details={"version": target, "reason": reason})
+            report(action_id, "failed", error=reason, version=target)
+            return
+        telemetry.emit("response", "update_verified",
+                       f"Agent update to {target} verified and acknowledged",
+                       severity="info",
+                       details={"version": target, "sha256": cmd.get("sha256", ""),
+                                "current_pid": os.getpid(), "verified": True})
+        report(action_id, "ok", acknowledged=target, verified=True)
+        return
+
+    # No manifest: a bare version-only intent. Nothing is downloaded or
+    # executed, so it is acknowledged, but flagged unsigned for visibility.
     telemetry.emit("response", "update_requested",
-                   f"Agent update to {target} acknowledged", severity="info",
-                   details={"version": target, "current_pid": os.getpid()})
-    report(action_id, "ok", acknowledged=target)
+                   f"Agent update to {target} acknowledged (unsigned)", severity="info",
+                   details={"version": target, "current_pid": os.getpid(), "verified": False})
+    report(action_id, "ok", acknowledged=target, verified=False)

@@ -1,5 +1,6 @@
 psutil>=5.9
 requests>=2.31
+cryptography>=41  # Ed25519 verification of signed agent updates (M15a)
 # Test dependency — kept here so `pip install -r requirements.txt && pytest -q`
 # passes with no manual extras.
 pytest>=8.0

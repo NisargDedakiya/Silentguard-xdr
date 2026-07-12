@@ -6,6 +6,25 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### M15a — Signed agent updates
+
+- **New `agent/silentguard_agent/update_verifier.py`:** verifies the signature
+  on a `remote_update` manifest (`version`/`url`/`sha256`) before the agent
+  honors it, so a spoofed management channel cannot push arbitrary code.
+  Supports **Ed25519** (preferred; endpoint holds only the public key) and
+  **HMAC-SHA256** (dependency-free fallback). Keys/signatures accept hex or
+  base64; the signed message is canonical key-sorted JSON of the manifest.
+- **`remote_update` now fails closed:** a manifest without a valid signature (or
+  with no trust key configured) is rejected (`update_rejected`); a valid one is
+  `update_verified`. A version-only acknowledgement keeps the legacy best-effort
+  behavior, flagged `verified: false`. `main.py` passes `config` through.
+- **Config (agent):** `SG_UPDATE_PUBLIC_KEY`, `SG_UPDATE_HMAC_KEY`,
+  `SG_REQUIRE_SIGNED_UPDATES` (default on). `cryptography>=41` added to agent
+  requirements for the Ed25519 path.
+- **Tests:** `agent/tests/test_update_verifier.py` — both schemes, tamper and
+  wrong-key rejection, fail-closed, and handler integration.
+- **Docs:** `docs/signed-updates.md`.
+
 ### Stage 6 — AI Security Assistant
 
 - **New service `app/services/ai_assistant.py`:** a Claude-powered triage

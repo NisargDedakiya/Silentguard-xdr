@@ -71,5 +71,6 @@ def test_remote_scan_reports_ok(config):
 def test_remote_update_acknowledges(config):
     tel = _Tel()
     report, calls = _reports()
-    handlers.remote_update({"action_id": 12, "version": "0.2.0"}, tel, report)
+    handlers.remote_update({"action_id": 12, "version": "0.2.0"}, tel, config, report)
     assert calls[0]["status"] == "ok" and calls[0]["acknowledged"] == "0.2.0"
+    assert calls[0]["verified"] is False  # version-only intent is unsigned

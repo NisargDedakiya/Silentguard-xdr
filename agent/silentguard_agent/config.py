@@ -59,6 +59,14 @@ class AgentConfig:
     # USB policy: when True, newly inserted USB mass-storage devices are
     # blocked (best effort) instead of just reported.
     block_usb_storage: bool = os.environ.get("SG_BLOCK_USB_STORAGE", "0") == "1"
+    # Signed agent updates (M15a): trust key(s) an update manifest must be
+    # signed with. Ed25519 public key (hex/base64) is preferred; an HMAC shared
+    # secret is a dependency-free fallback. When require_signed_updates is on
+    # (default), an update carrying a url/sha256 manifest is honored only with a
+    # valid signature; a version-only acknowledgement stays best-effort.
+    update_public_key: str = os.environ.get("SG_UPDATE_PUBLIC_KEY", "")
+    update_hmac_key: str = os.environ.get("SG_UPDATE_HMAC_KEY", "")
+    require_signed_updates: bool = os.environ.get("SG_REQUIRE_SIGNED_UPDATES", "1") != "0"
 
     def __post_init__(self) -> None:
         rep = load_reputation()

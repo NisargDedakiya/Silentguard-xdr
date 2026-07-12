@@ -111,7 +111,7 @@ def run() -> None:
         elif command == "remote_scan":
             handlers.remote_scan(cmd, telemetry, config, _report_result)
         elif command == "remote_update":
-            handlers.remote_update(cmd, telemetry, _report_result)
+            handlers.remote_update(cmd, telemetry, config, _report_result)
 
     running = True
 

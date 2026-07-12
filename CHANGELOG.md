@@ -35,5 +35,17 @@ MVP toward an enterprise XDR platform following the plan in
   passing**, no regressions.
 - **Dependency:** Added `pydantic-settings>=2.0` to `server/requirements.txt`.
 
-**Backward compatibility:** No API routes, request/response schemas, WebSocket
-events, or database tables changed. No migration required.
+- **M2 — Database migrations:** Introduced Alembic (`server/migrations/`,
+  `alembic.ini`) with a baseline migration reflecting the current five tables.
+  `env.py` reads `DATABASE_URL` from the centralized settings and targets the
+  ORM `Base.metadata`. Startup now `create_all`s only for SQLite (the
+  zero-config demo); production Postgres is migration-managed. The server Docker
+  image runs `alembic upgrade head` before uvicorn. Added `tests/test_migrations.py`
+  (+2) asserting migrations match the ORM models and downgrade cleanly. New
+  dependency `alembic>=1.13`; docs in `docs/migrations.md`.
+
+**Backward compatibility (M1 + M2):** No API routes, request/response schemas,
+or WebSocket events changed. The SQLite demo still auto-creates its schema with
+no migration step; only production backends require `alembic upgrade head`,
+which the Compose entrypoint runs automatically. Suite: **59 server + 33 agent
+= 92 passing.**

@@ -28,7 +28,14 @@ from .ws import hub
 configure_logging(settings.log_level, settings.log_format)
 log = get_logger("silentguard.main")
 
-Base.metadata.create_all(bind=engine)
+# Schema management:
+#   * SQLite (dev/demo default): auto-create missing tables for zero-config
+#     startup, exactly as before — the one-command demo keeps working.
+#   * Other backends (production Postgres): schema is owned by Alembic; run
+#     `alembic upgrade head`. We do NOT create_all there so migrations remain
+#     the single source of truth. See docs/migrations.md.
+if settings.database_url.startswith("sqlite"):
+    Base.metadata.create_all(bind=engine)
 
 
 @contextlib.asynccontextmanager

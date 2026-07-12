@@ -65,8 +65,19 @@ MVP toward an enterprise XDR platform following the plan in
   Tests: +12 (`tests/test_auth.py`). New deps `pyjwt>=2.8`, `alembic>=1.13`,
   `pydantic-settings>=2.0`. Docs: `docs/authentication.md`.
 
-**Backward compatibility (M1–M4):** No existing API route, request/response
+- **M5 — RBAC enforcement:** Per-endpoint permission checks across the admin API
+  via a role→permission matrix (`app/core/permissions.py`) and a
+  `require_permission` dependency returning a `Principal` (audit actor + role).
+  Six permissions (`read:fleet`, `read:audit`, `write:isolation`,
+  `write:blocklist`, `write:quarantine`, `manage:users`) mapped over the seven
+  roles. New user-management endpoints (`GET/POST /api/admin/users`,
+  `POST /api/admin/users/{id}/disable`), all audit-logged. Unauthorized callers
+  get `403`; the **legacy admin token resolves to super_admin** so existing
+  integrations are unaffected. Tests: +10 (`tests/test_rbac.py`). Docs:
+  `docs/rbac.md`.
+
+**Backward compatibility (M1–M5):** No existing API route, request/response
 schema, or WebSocket event changed; the admin API keeps accepting the legacy
-token. The SQLite demo still auto-creates its schema; production backends run
-`alembic upgrade head` (Compose does this automatically). Suite: **77 server +
-33 agent = 110 passing.**
+token (now with full super-admin permissions). The SQLite demo still
+auto-creates its schema; production backends run `alembic upgrade head` (Compose
+does this automatically). Suite: **87 server + 33 agent = 120 passing.**

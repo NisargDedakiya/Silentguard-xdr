@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import alerting, schemas
-from ..auth import require_admin
+from ..auth import Principal, require_permission
+from ..core.permissions import Permission
 from ..database import get_db
 from ..models import AuditLogEntry, BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
 from ..scoring import compute_score, compute_scores
@@ -14,7 +15,14 @@ from ..services import events
 from ..utils.time import aware_utc
 from ..ws import hub
 
-router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+# Reusable permission dependencies (each also enforces authentication).
+ReadFleet = Depends(require_permission(Permission.READ_FLEET))
+ReadAudit = Depends(require_permission(Permission.READ_AUDIT))
+WriteIsolation = Depends(require_permission(Permission.WRITE_ISOLATION))
+WriteBlocklist = Depends(require_permission(Permission.WRITE_BLOCKLIST))
+WriteQuarantine = Depends(require_permission(Permission.WRITE_QUARANTINE))
 
 ONLINE_WINDOW = datetime.timedelta(seconds=60)
 
@@ -41,14 +49,15 @@ def _device_out(d: Device, score: dict) -> schemas.DeviceOut:
 
 
 @router.get("/devices", response_model=list[schemas.DeviceOut])
-def list_devices(db: Session = Depends(get_db)):
+def list_devices(db: Session = Depends(get_db), _: Principal = ReadFleet):
     devices = db.query(Device).order_by(Device.enrolled_at).all()
     scores = compute_scores(db, [d.id for d in devices])
     return [_device_out(d, scores[d.id]) for d in devices]
 
 
 @router.get("/events", response_model=list[schemas.EventOut])
-def list_events(limit: int = 100, device_id: str | None = None, db: Session = Depends(get_db)):
+def list_events(limit: int = 100, device_id: str | None = None,
+                db: Session = Depends(get_db), _: Principal = ReadFleet):
     q = db.query(ThreatEvent).order_by(ThreatEvent.timestamp.desc(), ThreatEvent.id.desc())
     if device_id:
         q = q.filter(ThreatEvent.device_id == device_id)
@@ -93,25 +102,26 @@ async def _set_isolation(device_id: str, isolated: bool, db: Session, actor: str
 
 @router.post("/devices/{device_id}/isolate")
 async def isolate_device(device_id: str, db: Session = Depends(get_db),
-                         actor: str = Depends(require_admin)):
-    return await _set_isolation(device_id, True, db, actor)
+                         principal: Principal = WriteIsolation):
+    return await _set_isolation(device_id, True, db, principal.actor)
 
 
 @router.post("/devices/{device_id}/release")
 async def release_device(device_id: str, db: Session = Depends(get_db),
-                         actor: str = Depends(require_admin)):
-    return await _set_isolation(device_id, False, db, actor)
+                         principal: Principal = WriteIsolation):
+    return await _set_isolation(device_id, False, db, principal.actor)
 
 
 @router.get("/devices/{device_id}/score")
-def device_score(device_id: str, db: Session = Depends(get_db)):
+def device_score(device_id: str, db: Session = Depends(get_db), _: Principal = ReadFleet):
     if db.get(Device, device_id) is None:
         raise HTTPException(status_code=404, detail="Device not found")
     return compute_score(db, device_id)
 
 
 @router.get("/quarantine", response_model=list[schemas.QuarantineOut])
-def list_quarantine(device_id: str | None = None, db: Session = Depends(get_db)):
+def list_quarantine(device_id: str | None = None, db: Session = Depends(get_db),
+                    _: Principal = ReadFleet):
     q = db.query(QuarantineItem).order_by(QuarantineItem.quarantined_at.desc())
     if device_id:
         q = q.filter(QuarantineItem.device_id == device_id)
@@ -139,8 +149,9 @@ def list_quarantine(device_id: str | None = None, db: Session = Depends(get_db))
 
 @router.post("/quarantine/{item_id}/restore")
 async def restore_quarantine(item_id: str, db: Session = Depends(get_db),
-                             actor: str = Depends(require_admin)):
+                             principal: Principal = WriteQuarantine):
     """Queue a restore command; the agent executes it on next check-in."""
+    actor = principal.actor
     item = db.get(QuarantineItem, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Quarantine item not found")
@@ -171,7 +182,7 @@ async def restore_quarantine(item_id: str, db: Session = Depends(get_db),
 
 
 @router.get("/blocklist")
-def get_blocklist(db: Session = Depends(get_db)):
+def get_blocklist(db: Session = Depends(get_db), _: Principal = ReadFleet):
     return [
         {"id": e.id, "kind": e.kind, "value": e.value, "added_at": e.added_at}
         for e in db.query(BlocklistEntry).order_by(BlocklistEntry.added_at.desc()).all()
@@ -180,7 +191,8 @@ def get_blocklist(db: Session = Depends(get_db)):
 
 @router.post("/blocklist")
 async def add_blocklist(entry: schemas.BlocklistAdd, db: Session = Depends(get_db),
-                        actor: str = Depends(require_admin)):
+                        principal: Principal = WriteBlocklist):
+    actor = principal.actor
     if entry.kind not in ("domain", "process", "port"):
         raise HTTPException(status_code=400, detail="kind must be domain, process or port")
     exists = db.query(BlocklistEntry).filter(BlocklistEntry.value == entry.value).first()
@@ -196,18 +208,18 @@ async def add_blocklist(entry: schemas.BlocklistAdd, db: Session = Depends(get_d
 
 @router.delete("/blocklist/{entry_id}")
 def delete_blocklist(entry_id: int, db: Session = Depends(get_db),
-                     actor: str = Depends(require_admin)):
+                     principal: Principal = WriteBlocklist):
     row = db.get(BlocklistEntry, entry_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Entry not found")
     db.delete(row)
-    _audit(db, actor, "blocklist_remove", row.value, {"kind": row.kind, "entry_id": entry_id})
+    _audit(db, principal.actor, "blocklist_remove", row.value, {"kind": row.kind, "entry_id": entry_id})
     db.commit()
     return {"deleted": entry_id}
 
 
 @router.get("/audit", response_model=list[schemas.AuditOut])
-def list_audit(limit: int = 100, db: Session = Depends(get_db)):
+def list_audit(limit: int = 100, db: Session = Depends(get_db), _: Principal = ReadAudit):
     """Read-only audit trail of admin actions, newest first."""
     rows = (
         db.query(AuditLogEntry)

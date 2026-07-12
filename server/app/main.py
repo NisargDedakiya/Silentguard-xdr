@@ -22,7 +22,7 @@ from .core.middleware import (
 )
 from .database import Base, SessionLocal, engine
 from .monitor import run_monitor_loop
-from .routers import admin, agents, auth as auth_router
+from .routers import admin, agents, auth as auth_router, users as users_router
 from .services.auth_service import maybe_bootstrap_admin
 from .ws import hub
 
@@ -75,6 +75,7 @@ app.add_middleware(RequestContextMiddleware)
 register_error_handlers(app)
 
 app.include_router(auth_router.router)
+app.include_router(users_router.router)
 app.include_router(agents.router)
 app.include_router(admin.router)
 

@@ -8,11 +8,14 @@ compatibility while deployments migrate to user accounts.
 """
 import hashlib
 import secrets
+from dataclasses import dataclass
 
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from .core.config import settings
+from .core.permissions import Permission, has_permission
+from .core.roles import Role
 from .core.security import TokenError, decode_token
 from .database import get_db
 from .models import Device, User
@@ -33,6 +36,60 @@ def _bearer_token(authorization: str) -> str | None:
     if authorization and authorization.lower().startswith("bearer "):
         return authorization[7:].strip()
     return None
+
+
+@dataclass(frozen=True)
+class Principal:
+    """The authenticated caller of an admin request: an audit actor string and
+    the role used for RBAC checks. A JWT resolves to the user's role; the legacy
+    admin token resolves to SUPER_ADMIN for backward compatibility."""
+
+    actor: str
+    role: Role
+    user_id: str | None = None
+
+
+def current_principal(
+    x_admin_token: str = Header(default=""),
+    authorization: str = Header(default=""),
+    db: Session = Depends(get_db),
+) -> Principal:
+    """Authenticate an admin caller (JWT or legacy token) and return a Principal.
+    Raises 401 when neither credential is valid."""
+    bearer = _bearer_token(authorization)
+    if bearer:
+        try:
+            payload = decode_token(bearer, expected_type="access")
+        except TokenError:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        user = db.get(User, payload.get("sub", ""))
+        if user is None or not user.is_active:
+            raise HTTPException(status_code=401, detail="User is no longer active")
+        try:
+            role = Role(user.role)
+        except ValueError:
+            role = Role.READ_ONLY
+        return Principal(actor=f"user:{user.id}", role=role, user_id=user.id)
+
+    if ADMIN_TOKEN and secrets.compare_digest(x_admin_token, ADMIN_TOKEN):
+        return Principal(actor=token_fingerprint(x_admin_token), role=Role.SUPER_ADMIN)
+
+    raise HTTPException(status_code=401, detail="Invalid admin token")
+
+
+def require_permission(permission: Permission):
+    """Return a dependency that authenticates the caller and enforces `permission`,
+    returning the Principal (so handlers can read `.actor` for auditing)."""
+
+    def _dependency(principal: Principal = Depends(current_principal)) -> Principal:
+        if not has_permission(principal.role, permission):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Role '{principal.role.value}' lacks permission '{permission.value}'",
+            )
+        return principal
+
+    return _dependency
 
 
 def require_admin(

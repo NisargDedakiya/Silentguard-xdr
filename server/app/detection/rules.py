@@ -52,8 +52,12 @@ class EventContext:
 
     @property
     def haystack(self) -> str:
-        """Everything matchable, lower-cased: summary + serialized details."""
-        return (self.summary + " " + json.dumps(self.details, default=str)).lower()
+        """Everything matchable, lower-cased: summary + the raw command line +
+        serialized details. The raw command line is included un-escaped so
+        backslash path tokens (e.g. ``hklm\\sam``) match reliably (JSON
+        serialization would double the backslashes)."""
+        return (self.summary + " " + self.command_line + " "
+                + json.dumps(self.details, default=str)).lower()
 
 
 @dataclass(frozen=True)
@@ -109,6 +113,92 @@ def _is_lolbin(ctx: EventContext) -> bool:
                for b in _LOLBINS)
 
 
+# -- M9 rule-pack matchers (keyword signatures over the event haystack) ---
+def _any(text: str, *tokens: str) -> bool:
+    return any(t in text for t in tokens)
+
+
+def _all(text: str, *tokens: str) -> bool:
+    return all(t in text for t in tokens)
+
+
+def _is_credential_dumping(ctx: EventContext) -> bool:
+    h = ctx.haystack
+    return _any(h, "mimikatz", "sekurlsa", "lsadump", "invoke-mimikatz") \
+        or _all(h, "reg", "save", "hklm\\sam") \
+        or _all(h, "comsvcs", "minidump")
+
+
+def _is_lsass_access(ctx: EventContext) -> bool:
+    h = ctx.haystack
+    return "lsass" in h and _any(h, "procdump", "dump", "minidump", "comsvcs", "rundll32", "taskmgr")
+
+
+def _is_dll_injection(ctx: EventContext) -> bool:
+    return _any(ctx.haystack, "createremotethread", "virtualallocex",
+                "writeprocessmemory", "ntmapviewofsection", "queueuserapc")
+
+
+def _is_process_hollowing(ctx: EventContext) -> bool:
+    h = ctx.haystack
+    return "zwunmapviewofsection" in h or "process hollow" in h or "processhollow" in h \
+        or _all(h, "setthreadcontext", "resumethread")
+
+
+def _is_reflective_loading(ctx: EventContext) -> bool:
+    return _any(ctx.haystack, "reflectivepeinjection", "reflective load",
+                "reflectiveloader", "[reflection.assembly]::load")
+
+
+def _is_wmi_persistence(ctx: EventContext) -> bool:
+    return _any(ctx.haystack, "commandlineeventconsumer", "__eventconsumer",
+                "__eventfilter", "activescripteventconsumer") \
+        or _all(ctx.haystack, "wmi", "subscription")
+
+
+def _is_task_persistence(ctx: EventContext) -> bool:
+    h = ctx.haystack
+    return _all(h, "schtasks", "/create") or "new-scheduledtask" in h or "register-scheduledtask" in h
+
+
+def _is_registry_persistence(ctx: EventContext) -> bool:
+    h = ctx.haystack
+    return "currentversion\\run" in h or _all(h, "reg", "add", "\\run") \
+        or "userinit" in h and "reg" in h
+
+
+def _is_service_creation(ctx: EventContext) -> bool:
+    h = ctx.haystack
+    return _all(h, "sc", "create") or "new-service" in h or _all(h, "sc.exe", "binpath")
+
+
+def _is_privilege_escalation(ctx: EventContext) -> bool:
+    return _any(ctx.haystack, "bypassuac", "getsystem", "fodhelper", "eventvwr.exe",
+                "sedebugprivilege", "token::elevate", "printnightmare")
+
+
+def _is_lateral_movement(ctx: EventContext) -> bool:
+    h = ctx.haystack
+    return _any(h, "psexec", "paexec", "winrs", "\\pipe\\", "smbexec", "wmiexec") \
+        or _all(h, "wmic", "/node:") \
+        or _all(h, "invoke-command", "-computername")
+
+
+def _is_fileless_execution(ctx: EventContext) -> bool:
+    h = ctx.haystack
+    return _any(h, "reflection.assembly", "reflectivepeinjection") \
+        or _all(h, "iex", "downloadstring") \
+        or _all(h, "invoke-expression", "net.webclient")
+
+
+def _is_ransomware_behavior(ctx: EventContext) -> bool:
+    h = ctx.haystack
+    return _all(h, "vssadmin", "delete", "shadows") \
+        or _all(h, "wbadmin", "delete") \
+        or _all(h, "bcdedit", "recoveryenabled", "no") \
+        or _all(h, "wmic", "shadowcopy", "delete")
+
+
 SEED_RULES: tuple[Rule, ...] = (
     Rule(
         id="reverse_shell", name="Reverse shell / unauthorized listener terminated",
@@ -142,6 +232,95 @@ SEED_RULES: tuple[Rule, ...] = (
         technique_name="System Binary Proxy Execution",
         description="A known LOLBin was used to proxy execution.",
         matches=_is_lolbin,
+    ),
+    # -- M9 rule pack ----------------------------------------------------
+    Rule(
+        id="credential_dumping", name="Credential dumping",
+        severity=Severity.CRITICAL, technique_id="T1003",
+        technique_name="OS Credential Dumping",
+        description="Tooling associated with credential theft was observed.",
+        matches=_is_credential_dumping, responses=("alert", "isolate"),
+    ),
+    Rule(
+        id="lsass_access", name="LSASS memory access",
+        severity=Severity.CRITICAL, technique_id="T1003.001", technique_name="LSASS Memory",
+        description="A process attempted to read/dump LSASS memory.",
+        matches=_is_lsass_access, responses=("alert", "isolate"),
+    ),
+    Rule(
+        id="dll_injection", name="Remote process / DLL injection",
+        severity=Severity.HIGH, technique_id="T1055.001",
+        technique_name="Dynamic-link Library Injection",
+        description="Injection primitives (CreateRemoteThread/WriteProcessMemory) observed.",
+        matches=_is_dll_injection,
+    ),
+    Rule(
+        id="process_hollowing", name="Process hollowing",
+        severity=Severity.HIGH, technique_id="T1055.012",
+        technique_name="Process Hollowing",
+        description="Section unmapping / thread-context manipulation of a target process.",
+        matches=_is_process_hollowing,
+    ),
+    Rule(
+        id="reflective_loading", name="Reflective code loading",
+        severity=Severity.HIGH, technique_id="T1620",
+        technique_name="Reflective Code Loading",
+        description="In-memory reflective PE/assembly loading observed.",
+        matches=_is_reflective_loading,
+    ),
+    Rule(
+        id="wmi_persistence", name="WMI event-subscription persistence",
+        severity=Severity.HIGH, technique_id="T1546.003",
+        technique_name="WMI Event Subscription",
+        description="A permanent WMI event consumer/filter was created.",
+        matches=_is_wmi_persistence,
+    ),
+    Rule(
+        id="task_persistence", name="Scheduled task persistence",
+        severity=Severity.HIGH, technique_id="T1053.005", technique_name="Scheduled Task",
+        description="A scheduled task was created for persistence/execution.",
+        matches=_is_task_persistence,
+    ),
+    Rule(
+        id="registry_persistence", name="Registry Run-key persistence",
+        severity=Severity.HIGH, technique_id="T1547.001",
+        technique_name="Registry Run Keys / Startup Folder",
+        description="A Run/RunOnce or Userinit registry autostart was written.",
+        matches=_is_registry_persistence,
+    ),
+    Rule(
+        id="service_creation", name="Suspicious service creation",
+        severity=Severity.HIGH, technique_id="T1543.003", technique_name="Windows Service",
+        description="A new Windows service was created (common persistence).",
+        matches=_is_service_creation,
+    ),
+    Rule(
+        id="privilege_escalation", name="Privilege escalation attempt",
+        severity=Severity.HIGH, technique_id="T1548",
+        technique_name="Abuse Elevation Control Mechanism",
+        description="A known UAC-bypass / elevation technique was observed.",
+        matches=_is_privilege_escalation, responses=("alert", "isolate"),
+    ),
+    Rule(
+        id="lateral_movement", name="Lateral movement",
+        severity=Severity.HIGH, technique_id="T1021", technique_name="Remote Services",
+        description="Remote-execution tooling (PsExec/WMI/WinRM) targeting other hosts.",
+        matches=_is_lateral_movement, responses=("alert", "isolate"),
+    ),
+    Rule(
+        id="fileless_execution", name="Fileless / in-memory execution",
+        severity=Severity.HIGH, technique_id="T1055",
+        technique_name="Process Injection",
+        description="Code executed from memory without touching disk.",
+        matches=_is_fileless_execution,
+    ),
+    Rule(
+        id="ransomware_behavior", name="Ransomware behavior (recovery inhibition)",
+        severity=Severity.CRITICAL, technique_id="T1490",
+        technique_name="Inhibit System Recovery",
+        description="Shadow copies / backups deleted or recovery disabled — a strong "
+                    "ransomware precursor.",
+        matches=_is_ransomware_behavior, responses=("alert", "isolate"),
     ),
 )
 

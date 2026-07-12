@@ -37,9 +37,29 @@ telemetry).
 
 The first two fire on telemetry the agent **already emits today**; the
 command-line rules activate once a process/command-line monitor feeds
-`details.command_line` (agent work in M12). Additional rule packs
-(credential dumping, LSASS, injection, persistence, lateral movement,
-ransomware behavior) arrive in **M9**.
+`details.command_line` (agent work in M12).
+
+### M9 rule pack
+
+| Rule | Severity | ATT&CK | Signature |
+|---|---|---|---|
+| `credential_dumping` | critical | T1003 | mimikatz / sekurlsa / lsadump / `reg save hklm\sam` / comsvcs minidump |
+| `lsass_access` | critical | T1003.001 | `lsass` + dump/procdump/comsvcs/rundll32 |
+| `dll_injection` | high | T1055.001 | CreateRemoteThread / WriteProcessMemory / VirtualAllocEx |
+| `process_hollowing` | high | T1055.012 | ZwUnmapViewOfSection / SetThreadContext+ResumeThread |
+| `reflective_loading` | high | T1620 | Invoke-ReflectivePEInjection / `[Reflection.Assembly]::Load` |
+| `wmi_persistence` | high | T1546.003 | CommandLineEventConsumer / `__EventFilter` |
+| `task_persistence` | high | T1053.005 | `schtasks /create` / New-ScheduledTask |
+| `registry_persistence` | high | T1547.001 | `CurrentVersion\Run` / `reg add …\Run` |
+| `service_creation` | high | T1543.003 | `sc create` / New-Service |
+| `privilege_escalation` | high | T1548 | bypassuac / getsystem / fodhelper / SeDebugPrivilege |
+| `lateral_movement` | high | T1021 | PsExec / `wmic /node:` / WinRM / smbexec |
+| `fileless_execution` | high | T1055 | IEX+DownloadString / Reflection.Assembly |
+| `ransomware_behavior` | critical | T1490 | `vssadmin delete shadows` / `wbadmin delete` / `bcdedit … recoveryenabled no` |
+
+Rules match keyword signatures over an event "haystack" (summary + raw command
+line + serialized details, lower-cased). The critical rules ship the `isolate`
+response (still gated by `SG_DETECTION_AUTO_ISOLATE`).
 
 ## Responses
 

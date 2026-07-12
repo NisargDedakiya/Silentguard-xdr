@@ -101,8 +101,18 @@ MVP toward an enterprise XDR platform following the plan in
   additive `detections` count. Tests: +16 (`tests/test_detection.py`). Docs:
   `docs/detection-engine.md`.
 
-**Backward compatibility (M1–M8):** No existing API route or WebSocket event was
+- **M9 — Detection rule packs:** 13 additional rules over the M8 engine
+  (no structural change): credential dumping (T1003), LSASS access (T1003.001),
+  DLL injection (T1055.001), process hollowing (T1055.012), reflective loading
+  (T1620), WMI/scheduled-task/registry/service persistence
+  (T1546.003/T1053.005/T1547.001/T1543.003), privilege escalation (T1548),
+  lateral movement (T1021), fileless execution (T1055), ransomware behavior
+  (T1490). Keyword signatures match over an event "haystack" (summary + raw
+  command line + serialized details). Critical rules carry the `isolate`
+  response (still gated). Tests: +18 (`tests/test_detection_packs.py`).
+
+**Backward compatibility (M1–M9):** No existing API route or WebSocket event was
 removed; the telemetry response is additively extended (`detections` count), and
 the admin API keeps accepting the legacy token. The SQLite demo still
 auto-creates its schema; production backends run `alembic upgrade head`. Suite:
-**106 server + 33 agent = 139 passing.**
+**123 server + 33 agent = 156 passing.**

@@ -18,6 +18,7 @@ import sys
 import time
 
 from .config import AgentConfig
+from .inventory import collect_inventory
 from .isolation import IsolationController
 from .monitors.arp_guard import ArpGuard
 from .monitors.dns_sinkhole import DnsSinkhole
@@ -83,6 +84,7 @@ def run() -> None:
 
     telemetry.emit("agent", "started", f"SilentGuard agent online on {config.hostname}")
     last_checkin = 0.0
+    last_inventory = 0.0
 
     while running:
         try:
@@ -93,6 +95,14 @@ def run() -> None:
             usb_guard.scan()
 
             now = time.monotonic()
+            # Report inventory on the same cadence as check-in.
+            if now - last_inventory >= config.inventory_interval:
+                last_inventory = now
+                try:
+                    telemetry.send_inventory(collect_inventory())
+                except Exception as exc:  # noqa: BLE001 — inventory must not kill the loop
+                    log.warning("Inventory collection failed: %s", exc)
+
             if now - last_checkin >= config.checkin_interval:
                 last_checkin = now
                 state = telemetry.checkin()

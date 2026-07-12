@@ -9,7 +9,15 @@ from .. import alerting, schemas
 from ..auth import Principal, require_permission
 from ..core.permissions import Permission
 from ..database import get_db
-from ..models import AuditLogEntry, BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
+from ..models import (
+    AuditLogEntry,
+    BlocklistEntry,
+    Device,
+    DeviceInventory,
+    QuarantineItem,
+    ThreatEvent,
+    utcnow,
+)
 from ..scoring import compute_score, compute_scores
 from ..services import events
 from ..services.tenancy import owning_org, scope_query
@@ -131,6 +139,23 @@ async def release_device(device_id: str, db: Session = Depends(get_db),
 def device_score(device_id: str, db: Session = Depends(get_db), principal: Principal = ReadFleet):
     _get_device_scoped(db, device_id, principal)
     return compute_score(db, device_id)
+
+
+@router.get("/devices/{device_id}/inventory", response_model=schemas.InventoryOut)
+def device_inventory(device_id: str, db: Session = Depends(get_db),
+                     principal: Principal = ReadFleet):
+    device = _get_device_scoped(db, device_id, principal)
+    inv = db.get(DeviceInventory, device_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="No inventory reported yet")
+    return schemas.InventoryOut(
+        device_id=inv.device_id, hostname=device.hostname, os_version=inv.os_version,
+        kernel=inv.kernel, cpu_model=inv.cpu_model, cpu_count=inv.cpu_count,
+        ram_total_mb=inv.ram_total_mb, disk_total_gb=inv.disk_total_gb,
+        disk_free_gb=inv.disk_free_gb, installed_software=inv.installed_software or [],
+        running_services=inv.running_services or [], logged_in_users=inv.logged_in_users or [],
+        health=inv.health, posture=inv.posture or {}, updated_at=inv.updated_at,
+    )
 
 
 @router.get("/quarantine", response_model=list[schemas.QuarantineOut])

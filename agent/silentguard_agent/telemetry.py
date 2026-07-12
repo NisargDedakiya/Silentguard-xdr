@@ -86,6 +86,23 @@ class TelemetryClient:
             for _ in range(min(len(batch), len(self.buffer))):
                 self.buffer.popleft()
 
+    # -- inventory --------------------------------------------------------
+    def send_inventory(self, report: dict) -> bool:
+        """Post a device inventory snapshot. Best-effort; returns success."""
+        try:
+            resp = requests.post(
+                f"{self.config.server_url}/api/agent/inventory",
+                json=report,
+                headers={"X-Agent-Key": self.api_key or ""},
+                timeout=10,
+                verify=self.config.verify_tls,
+            )
+            resp.raise_for_status()
+            return True
+        except requests.RequestException as exc:
+            log.warning("Inventory report failed: %s", exc)
+            return False
+
     # -- check-in ---------------------------------------------------------
     def checkin(self) -> dict | None:
         try:

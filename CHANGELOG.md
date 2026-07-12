@@ -123,8 +123,15 @@ MVP toward an enterprise XDR platform following the plan in
   `SG_INTEL_FEED_FILE`. Tests: +9 (`tests/test_intel.py`). Docs:
   `docs/threat-intel.md`.
 
-**Backward compatibility (M1–M10):** No existing API route or WebSocket event was
-removed; the telemetry response is additively extended (`detections` count), and
-the admin API keeps accepting the legacy token. The SQLite demo still
-auto-creates its schema; production backends run `alembic upgrade head`. Suite:
-**132 server + 33 agent = 165 passing.**
+- **M13 — Device inventory + posture:** Agents collect a hardware/software/
+  services/users snapshot (`silentguard_agent/inventory.py`, every
+  `SG_INVENTORY_INTERVAL`s) and POST it to `/api/agent/inventory`. The server
+  stores the latest per device (`device_inventory` table, migration
+  `cc6ab54ef5b3`) and derives a health/posture summary (disk, agent version,
+  isolation). New `GET /api/admin/devices/{id}/inventory` (`read:fleet`,
+  org-scoped). Tests: +5 server, +2 agent. Docs: `docs/device-inventory.md`.
+
+**Backward compatibility (M1–M13):** No existing API route or WebSocket event was
+removed; new endpoints are additive and the admin API keeps accepting the legacy
+token. The SQLite demo still auto-creates its schema; production backends run
+`alembic upgrade head`. Suite: **137 server + 35 agent = 172 passing.**

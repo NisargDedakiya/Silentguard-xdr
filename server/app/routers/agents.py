@@ -122,6 +122,23 @@ async def telemetry(
     return {"accepted": len(stored), "detections": len(detections)}
 
 
+@router.post("/inventory")
+async def report_inventory(
+    report: schemas.InventoryReport,
+    device: Device = Depends(require_agent),
+    db: Session = Depends(get_db),
+):
+    """Agent posts its hardware/software/posture snapshot; stored as the latest
+    inventory for the device."""
+    from ..services.inventory import upsert_inventory
+
+    device.last_seen = utcnow()
+    device.unresponsive_alerted = False
+    inv = upsert_inventory(db, device, report)
+    db.commit()
+    return {"device_id": device.id, "health": inv.health}
+
+
 @router.get("/checkin", response_model=schemas.CheckinResponse)
 async def checkin(device: Device = Depends(require_agent), db: Session = Depends(get_db)):
     """Heartbeat: agent polls for isolation state, queued commands and the

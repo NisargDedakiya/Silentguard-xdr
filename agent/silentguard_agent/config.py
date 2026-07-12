@@ -27,6 +27,7 @@ class AgentConfig:
     verify_tls: bool = os.environ.get("SG_VERIFY_TLS", "1") != "0"
     poll_interval: float = float(os.environ.get("SG_POLL_INTERVAL", "3"))
     checkin_interval: float = float(os.environ.get("SG_CHECKIN_INTERVAL", "10"))
+    inventory_interval: float = float(os.environ.get("SG_INVENTORY_INTERVAL", "300"))
     hostname: str = field(default_factory=socket.gethostname)
     platform: str = field(default_factory=lambda: f"{platform.system()} {platform.release()}")
     # Detection defaults (extended at runtime by fleet blocklist pushes)

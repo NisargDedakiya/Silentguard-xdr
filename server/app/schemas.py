@@ -103,6 +103,37 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class InventoryReport(BaseModel):
+    os_version: str = ""
+    kernel: str = ""
+    cpu_model: str = ""
+    cpu_count: int = 0
+    ram_total_mb: int = 0
+    disk_total_gb: int = 0
+    disk_free_gb: int = 0
+    installed_software: list[dict[str, Any]] = Field(default_factory=list)
+    running_services: list[dict[str, Any]] = Field(default_factory=list)
+    logged_in_users: list[str] = Field(default_factory=list)
+
+
+class InventoryOut(BaseModel):
+    device_id: str
+    hostname: str = ""
+    os_version: str
+    kernel: str
+    cpu_model: str
+    cpu_count: int
+    ram_total_mb: int
+    disk_total_gb: int
+    disk_free_gb: int
+    installed_software: list[dict[str, Any]] = Field(default_factory=list)
+    running_services: list[dict[str, Any]] = Field(default_factory=list)
+    logged_in_users: list[str] = Field(default_factory=list)
+    health: str
+    posture: dict[str, Any] = Field(default_factory=dict)
+    updated_at: datetime.datetime
+
+
 class IOCCreate(BaseModel):
     ioc_type: str  # domain|ip|url|sha256|certificate
     value: str

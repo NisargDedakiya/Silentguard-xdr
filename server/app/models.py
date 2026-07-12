@@ -135,6 +135,29 @@ class AuditLogEntry(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class DeviceInventory(Base):
+    """Latest hardware/software/security-posture snapshot for a device (M13),
+    upserted from agent inventory reports. One row per device."""
+
+    __tablename__ = "device_inventory"
+
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), primary_key=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
+    os_version: Mapped[str] = mapped_column(String(255), default="")
+    kernel: Mapped[str] = mapped_column(String(255), default="")
+    cpu_model: Mapped[str] = mapped_column(String(255), default="")
+    cpu_count: Mapped[int] = mapped_column(Integer, default=0)
+    ram_total_mb: Mapped[int] = mapped_column(Integer, default=0)
+    disk_total_gb: Mapped[int] = mapped_column(Integer, default=0)
+    disk_free_gb: Mapped[int] = mapped_column(Integer, default=0)
+    installed_software: Mapped[list] = mapped_column(JSON, default=list)
+    running_services: Mapped[list] = mapped_column(JSON, default=list)
+    logged_in_users: Mapped[list] = mapped_column(JSON, default=list)
+    health: Mapped[str] = mapped_column(String(16), default="unknown")  # healthy|degraded|unknown
+    posture: Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class IOC(Base):
     """Indicator of compromise (M10). Org-scoped, with confidence and optional
     expiration; imported from feeds or managed manually."""

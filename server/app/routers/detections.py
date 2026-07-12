@@ -6,7 +6,8 @@ from .. import schemas
 from ..auth import Principal, require_permission
 from ..core.permissions import Permission
 from ..database import get_db
-from ..models import AuditLogEntry, Detection, Device
+from ..models import AuditLogEntry, Detection, Device, ThreatEvent
+from ..services import ai_assistant
 from ..services.tenancy import scope_query
 
 router = APIRouter(prefix="/api/admin/detections", tags=["detections"])
@@ -82,3 +83,27 @@ def resolve(detection_id: int, db: Session = Depends(get_db),
         technique_name=det.technique_name, status=det.status, created_at=det.created_at,
         details=det.details or {},
     )
+
+
+@router.post("/{detection_id}/explain", response_model=schemas.DetectionExplanationOut)
+def explain(detection_id: int, db: Session = Depends(get_db),
+            principal: Principal = ReadFleet):
+    """AI Security Assistant (Stage 6): a Claude-generated triage briefing —
+    summary, MITRE ATT&CK explanation, and prioritized remediation. Read-only
+    (no state change); returns 503 when the assistant is not configured."""
+    det = _get_scoped(db, detection_id, principal)
+    if not ai_assistant.is_available():
+        raise HTTPException(status_code=503, detail="AI Security Assistant is not configured")
+    event = db.get(ThreatEvent, det.event_id) if det.event_id else None
+    try:
+        result = ai_assistant.explain_detection(det, event)
+    except ai_assistant.AIAssistantUnavailable:
+        raise HTTPException(status_code=503, detail="AI Security Assistant is not configured")
+    except ai_assistant.AIAssistantError as exc:
+        raise HTTPException(status_code=502, detail=f"AI Security Assistant error: {exc}")
+    db.add(AuditLogEntry(actor=principal.actor, action="detection_explain",
+                         target=str(det.id),
+                         details={"rule_id": det.rule_id, "model": result["model"]},
+                         org_id=det.org_id))
+    db.commit()
+    return schemas.DetectionExplanationOut(detection_id=det.id, **result)

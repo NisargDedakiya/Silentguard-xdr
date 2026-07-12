@@ -284,6 +284,17 @@ class DetectionOut(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class DetectionExplanationOut(BaseModel):
+    """AI Security Assistant triage briefing for a single detection (Stage 6)."""
+    detection_id: int
+    summary: str
+    mitre_explanation: str
+    remediation: list[str] = Field(default_factory=list)
+    confidence: str
+    model: str
+    generated_at: str
+
+
 class AuditOut(BaseModel):
     id: int
     timestamp: datetime.datetime

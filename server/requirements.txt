@@ -6,6 +6,7 @@ pydantic>=2.6
 pydantic-settings>=2.0
 pyjwt>=2.8
 python-multipart>=0.0.9
+anthropic>=0.40  # AI Security Assistant (Stage 6); only used when SG_AI_ENABLED
 # Test dependencies — kept here so `pip install -r requirements.txt && pytest -q`
 # passes with no manual extras.
 pytest>=8.0

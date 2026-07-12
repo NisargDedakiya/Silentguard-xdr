@@ -77,6 +77,32 @@ class Settings(BaseSettings):
     bootstrap_admin_email: str = Field(default="", alias="SG_BOOTSTRAP_ADMIN_EMAIL")
     bootstrap_admin_password: str = Field(default="", alias="SG_BOOTSTRAP_ADMIN_PASSWORD")
 
+    # -- AI Security Assistant (Stage 6; optional, additive) --------------
+    # Claude-powered detection triage: summary, ATT&CK explanation, remediation.
+    # Fully off by default; the platform runs identically without it. Enable it
+    # and supply an API key to turn on the /explain endpoint.
+    ai_enabled: bool = Field(default=False, alias="SG_AI_ENABLED")
+    # API key for the Anthropic API. Falls back to the standard ANTHROPIC_API_KEY
+    # environment variable if this is unset (see effective_anthropic_api_key).
+    anthropic_api_key: str = Field(default="", alias="SG_ANTHROPIC_API_KEY")
+    # Target model. Empty means "use the assistant's built-in default" — pin a
+    # specific model here to control cost/capability in production.
+    ai_model: str = Field(default="", alias="SG_AI_MODEL")
+    ai_max_tokens: int = Field(default=2048, alias="SG_AI_MAX_TOKENS")
+
+    @property
+    def effective_anthropic_api_key(self) -> str:
+        if self.anthropic_api_key:
+            return self.anthropic_api_key
+        import os
+
+        return os.environ.get("ANTHROPIC_API_KEY", "")
+
+    @property
+    def ai_available(self) -> bool:
+        """The assistant is usable only when explicitly enabled and a key is set."""
+        return self.ai_enabled and bool(self.effective_anthropic_api_key)
+
     @property
     def effective_jwt_secret(self) -> str:
         if self.jwt_secret:

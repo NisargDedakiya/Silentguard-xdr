@@ -6,6 +6,28 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### Stage 6 — AI Security Assistant
+
+- **New service `app/services/ai_assistant.py`:** a Claude-powered triage
+  assistant that turns a detection into an analyst briefing — summary, MITRE
+  ATT&CK explanation, and prioritized remediation. Prompt is built from the
+  detection facts plus the originating telemetry event; the reply is parsed
+  defensively (JSON, code-fenced JSON, or plain-text fallback) and adaptive
+  thinking blocks are stripped.
+- **New endpoint `POST /api/admin/detections/{id}/explain`** (permission
+  `READ_FLEET`, org-scoped, audited as `detection_explain`). Returns the
+  briefing, or `503` when the assistant is unconfigured / `502` on model error.
+- **Config (additive, off by default):** `SG_AI_ENABLED`,
+  `SG_ANTHROPIC_API_KEY` (falls back to `ANTHROPIC_API_KEY`), `SG_AI_MODEL`,
+  `SG_AI_MAX_TOKENS`, plus `settings.ai_available`. The assistant is inert
+  unless explicitly enabled with a key, so existing deployments are unaffected.
+- **Best-effort by design:** every SDK failure is caught, logged, and surfaced
+  as a typed error; the `anthropic` dependency is imported lazily so it is only
+  needed at runtime when the assistant is enabled.
+- **Tests:** `server/tests/test_ai_assistant.py` (fake client, no network) —
+  parsing, gating, error normalization, and the endpoint 200/404/502/503 paths.
+- **Docs:** `docs/ai-assistant.md`.
+
 ### Enterprise upgrade — Phase 1 (audit) + Module M1 (foundation)
 
 - **docs:** Added `docs/AUDIT.md` (full pre-implementation codebase audit) and

@@ -52,8 +52,21 @@ MVP toward an enterprise XDR platform following the plan in
   `monitor.py`, and `admin.py`. Removed now-dead imports. Added
   `tests/test_services.py` (+6). WebSocket/REST payloads are byte-identical.
 
-**Backward compatibility (M1–M3):** No API routes, request/response schemas, or
-WebSocket events changed. The SQLite demo still auto-creates its schema with no
-migration step; only production backends require `alembic upgrade head`, which
-the Compose entrypoint runs automatically. Suite: **65 server + 33 agent = 98
-passing.**
+- **M4 — Users + JWT authentication:** Real user accounts replace the single
+  shared admin token as the identity model, **backward compatible** — the legacy
+  `X-Admin-Token` still authorizes the admin API. New `users` and
+  `refresh_tokens` tables (migration `967f09a44a35`), the seven RBAC roles
+  (`app/core/roles.py`), PBKDF2 password hashing + HS256 JWTs
+  (`app/core/security.py`), and an auth service with account lockout, per-IP
+  login rate limiting, a password policy, refresh-token rotation/revocation, and
+  optional bootstrap super-admin. New endpoints `POST /api/auth/{login,refresh,
+  logout}` and `GET /api/auth/me`. `require_admin` now accepts a JWT **or** the
+  legacy token; `get_current_user` requires a JWT. Logins are audit-logged.
+  Tests: +12 (`tests/test_auth.py`). New deps `pyjwt>=2.8`, `alembic>=1.13`,
+  `pydantic-settings>=2.0`. Docs: `docs/authentication.md`.
+
+**Backward compatibility (M1–M4):** No existing API route, request/response
+schema, or WebSocket event changed; the admin API keeps accepting the legacy
+token. The SQLite demo still auto-creates its schema; production backends run
+`alembic upgrade head` (Compose does this automatically). Suite: **77 server +
+33 agent = 110 passing.**

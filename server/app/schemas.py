@@ -70,6 +70,39 @@ class BlocklistAdd(BaseModel):
     value: str
 
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class UserCreate(BaseModel):
+    email: str
+    password: str
+    role: str = "read_only"
+
+
+class UserOut(BaseModel):
+    id: str
+    email: str
+    role: str
+    is_active: bool
+    last_login_at: Optional[datetime.datetime] = None
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class AuditOut(BaseModel):
     id: int
     timestamp: datetime.datetime

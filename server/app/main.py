@@ -20,9 +20,10 @@ from .core.middleware import (
     RequestContextMiddleware,
     SecureHeadersMiddleware,
 )
-from .database import Base, engine
+from .database import Base, SessionLocal, engine
 from .monitor import run_monitor_loop
-from .routers import admin, agents
+from .routers import admin, agents, auth as auth_router
+from .services.auth_service import maybe_bootstrap_admin
 from .ws import hub
 
 configure_logging(settings.log_level, settings.log_format)
@@ -41,6 +42,12 @@ if settings.database_url.startswith("sqlite"):
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("service starting", extra={"environment": settings.environment})
+    with contextlib.suppress(Exception):
+        db = SessionLocal()
+        try:
+            maybe_bootstrap_admin(db)
+        finally:
+            db.close()
     task = asyncio.create_task(run_monitor_loop())
     try:
         yield
@@ -67,6 +74,7 @@ app.add_middleware(RequestContextMiddleware)
 
 register_error_handlers(app)
 
+app.include_router(auth_router.router)
 app.include_router(agents.router)
 app.include_router(admin.router)
 

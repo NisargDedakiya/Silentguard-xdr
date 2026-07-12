@@ -46,6 +46,33 @@ class Settings(BaseSettings):
     # "json" for production log aggregation; "console" for readable local dev.
     log_format: str = Field(default="json", alias="SG_LOG_FORMAT")
 
+    # -- authentication (M4; new, additive) ------------------------------
+    # HS256 signing secret for JWTs. Defaults to the admin token so the demo
+    # works zero-config; set an independent high-entropy value in production.
+    jwt_secret: str = Field(default="", alias="SG_JWT_SECRET")
+    access_token_ttl_seconds: int = Field(default=900, alias="SG_ACCESS_TTL")  # 15 min
+    refresh_token_ttl_seconds: int = Field(default=1209600, alias="SG_REFRESH_TTL")  # 14 days
+    password_min_length: int = Field(default=12, alias="SG_PASSWORD_MIN_LENGTH")
+    login_max_attempts: int = Field(default=5, alias="SG_LOGIN_MAX_ATTEMPTS")
+    login_lockout_seconds: int = Field(default=900, alias="SG_LOGIN_LOCKOUT_SECONDS")
+    # Sliding-window login rate limit (per client IP): N attempts per window.
+    login_rate_limit: int = Field(default=10, alias="SG_LOGIN_RATE_LIMIT")
+    login_rate_window_seconds: int = Field(default=60, alias="SG_LOGIN_RATE_WINDOW")
+    # Optional bootstrap super-admin, created on startup if no users exist.
+    bootstrap_admin_email: str = Field(default="", alias="SG_BOOTSTRAP_ADMIN_EMAIL")
+    bootstrap_admin_password: str = Field(default="", alias="SG_BOOTSTRAP_ADMIN_PASSWORD")
+
+    @property
+    def effective_jwt_secret(self) -> str:
+        if self.jwt_secret:
+            return self.jwt_secret
+        # No explicit secret: derive a 256-bit key from the admin token so the
+        # demo signs tokens with an adequately long key. Set SG_JWT_SECRET to an
+        # independent high-entropy value in production.
+        import hashlib
+
+        return hashlib.sha256(f"sg-jwt::{self.admin_token}".encode()).hexdigest()
+
     # -- web hardening (new, additive; defaults preserve current behavior) -
     # Comma-separated list. Default "*" matches the pre-M1 CORS policy; set an
     # explicit origin list in production.

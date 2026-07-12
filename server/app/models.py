@@ -66,6 +66,38 @@ class QuarantineItem(Base):
     restored_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class User(Base):
+    """Dashboard/admin user account (M4). Replaces the single shared admin
+    token as the identity model; the legacy token remains accepted during the
+    transition."""
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(secrets.token_hex(16)))
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(32), default="read_only")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Account-lockout bookkeeping.
+    failed_login_count: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RefreshToken(Base):
+    """Server-side record of an issued refresh token, keyed by its JWT ``jti``,
+    so individual sessions can be revoked (logout, rotation)."""
+
+    __tablename__ = "refresh_tokens"
+
+    jti: Mapped[str] = mapped_column(String(32), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class AuditLogEntry(Base):
     """Immutable record of every admin action (isolate, release, blocklist
     add/remove, quarantine restore) with the acting token's fingerprint."""

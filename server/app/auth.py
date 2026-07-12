@@ -6,17 +6,19 @@ admin token (X-Admin-Token header). Both are simple bearer-style secrets for
 the MVP; the enterprise roadmap replaces the admin token with RBAC/SSO/MFA.
 """
 import hashlib
-import os
 import secrets
 
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
+from .core.config import settings
 from .database import get_db
 from .models import Device
 
-ENROLL_TOKEN = os.environ.get("SG_ENROLL_TOKEN", "silentguard-enroll-demo")
-ADMIN_TOKEN = os.environ.get("SG_ADMIN_TOKEN", "silentguard-admin-demo")
+# Re-exported at module level for backward compatibility (tests and callers
+# import these names directly). Values come from the centralized settings.
+ENROLL_TOKEN = settings.enroll_token
+ADMIN_TOKEN = settings.admin_token
 
 
 def token_fingerprint(token: str) -> str:

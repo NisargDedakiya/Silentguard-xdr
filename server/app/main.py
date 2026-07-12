@@ -12,16 +12,28 @@ from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import ADMIN_TOKEN
+from .core.config import settings
+from .core.errors import register_error_handlers
+from .core.logging import configure_logging, get_logger
+from .core.middleware import (
+    BodySizeLimitMiddleware,
+    RequestContextMiddleware,
+    SecureHeadersMiddleware,
+)
 from .database import Base, engine
 from .monitor import run_monitor_loop
 from .routers import admin, agents
 from .ws import hub
+
+configure_logging(settings.log_level, settings.log_format)
+log = get_logger("silentguard.main")
 
 Base.metadata.create_all(bind=engine)
 
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
+    log.info("service starting", extra={"environment": settings.environment})
     task = asyncio.create_task(run_monitor_loop())
     try:
         yield
@@ -29,16 +41,24 @@ async def lifespan(app: FastAPI):
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+        log.info("service stopped")
 
 
 app = FastAPI(title="SilentGuard XDR", version="0.1.0", lifespan=lifespan)
 
+# Middleware runs in reverse registration order for requests; register the
+# request-context (correlation id + access log) last so it wraps everything.
+app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(SecureHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origin_list,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestContextMiddleware)
+
+register_error_handlers(app)
 
 app.include_router(agents.router)
 app.include_router(admin.router)

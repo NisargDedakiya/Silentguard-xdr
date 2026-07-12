@@ -215,6 +215,17 @@ Test dependencies (pytest, pytest-asyncio, httpx2) ship in
 `server/requirements.txt`, so a fresh `pip install -r requirements.txt`
 is all that's needed before `pytest -q`.
 
+## Configuration & observability
+
+All backend settings are centralized in `server/app/core/config.py` (typed,
+`pydantic-settings`). The server emits structured JSON logs with a per-request
+correlation id (`X-Request-ID`), sets secure response headers, and returns a
+stable error envelope for unhandled exceptions. See
+[`docs/configuration.md`](docs/configuration.md) for the full environment
+variable reference. The enterprise upgrade plan lives in
+[`docs/ROADMAP.md`](docs/ROADMAP.md); the pre-work audit is
+[`docs/AUDIT.md`](docs/AUDIT.md).
+
 ## Security design
 
 - Per-device API keys issued at enrollment (`X-Agent-Key`) authenticate all telemetry.

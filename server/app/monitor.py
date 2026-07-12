@@ -9,9 +9,9 @@ did not restart — a possible tamper attempt.
 import asyncio
 import datetime
 import logging
-import os
 
 from . import alerting
+from .core.config import settings
 from .database import SessionLocal
 from .mitre import technique_for
 from .models import Device, ThreatEvent, utcnow
@@ -19,8 +19,8 @@ from .ws import hub
 
 log = logging.getLogger("silentguard.monitor")
 
-UNRESPONSIVE_SECONDS = int(os.environ.get("SG_UNRESPONSIVE_SECONDS", "45"))
-SCAN_INTERVAL_SECONDS = int(os.environ.get("SG_MONITOR_INTERVAL", "15"))
+UNRESPONSIVE_SECONDS = settings.unresponsive_seconds
+SCAN_INTERVAL_SECONDS = settings.monitor_interval_seconds
 
 
 def _aware(dt: datetime.datetime) -> datetime.datetime:

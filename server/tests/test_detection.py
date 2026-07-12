@@ -156,6 +156,19 @@ def test_yara_match_telemetry_creates_detection(client, enrolled_device):
     assert hits[0]["technique_id"] == "T1105"
 
 
+def test_suricata_alert_creates_detection(client, enrolled_device):
+    """A Suricata IDS alert forwarded by the agent creates a high detection."""
+    _emit(client, enrolled_device["headers"], source="suricata", action="alert",
+          severity="warning", summary="Suricata alert: ET MALWARE Cobalt Strike",
+          details={"signature": "ET MALWARE Cobalt Strike", "signature_id": 2027,
+                   "src_ip": "10.0.0.5", "dest_ip": "10.0.0.9"})
+    dets = client.get("/api/admin/detections", headers=ADMIN_HEADERS).json()
+    hits = [d for d in dets if d["rule_id"] == "suricata_alert"]
+    assert len(hits) == 1
+    assert hits[0]["severity"] == "high"
+    assert hits[0]["technique_id"] == "T1071"
+
+
 def test_auto_isolate_response_when_enabled(client, enrolled_device, monkeypatch):
     from app.core.config import settings
     monkeypatch.setattr(settings, "detection_auto_isolate", True)

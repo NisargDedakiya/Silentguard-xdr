@@ -6,6 +6,19 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.5 — Suricata IDS integration
+
+- **New `agent/silentguard_agent/monitors/suricata_monitor.py`:** tails a
+  Suricata `eve.json` and forwards network **alerts** as telemetry, so IDS
+  detections share the XDR timeline with endpoint detections. Incremental
+  `tail -f` follow (baseline at EOF, no historical replay), rotation-aware
+  offset reset, non-alert/malformed lines skipped, per-scan bounded. Inert
+  unless `SG_SURICATA_ENABLED` (path `SG_SURICATA_EVE`).
+- **Server:** new built-in `suricata_alert` rule maps a `source="suricata"`
+  event to a `high` detection (T1071).
+- **Tests:** `agent/tests/test_suricata_monitor.py` + a server ingestion test.
+  **Docs:** `docs/suricata.md`.
+
 ### v1.4 — TLS certificate pinning (agent)
 
 - **New `agent/silentguard_agent/cert_pinning.py`:** pins the management

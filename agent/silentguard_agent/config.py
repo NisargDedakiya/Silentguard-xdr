@@ -79,6 +79,9 @@ class AgentConfig:
     # TLS certificate pinning (v1.4): SHA-256 fingerprint of the server leaf
     # cert (hex, colons optional). Empty = default CA verification only.
     pin_sha256: str = os.environ.get("SG_PIN_SHA256", "")
+    # Suricata IDS integration (v1.5): tail an eve.json log and forward alerts.
+    suricata_enabled: bool = os.environ.get("SG_SURICATA_ENABLED", "0") == "1"
+    suricata_eve_path: str = os.environ.get("SG_SURICATA_EVE", "/var/log/suricata/eve.json")
 
     def __post_init__(self) -> None:
         rep = load_reputation()

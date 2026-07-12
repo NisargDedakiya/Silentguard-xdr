@@ -25,6 +25,7 @@ from .monitors.dns_sinkhole import DnsSinkhole
 from .monitors.file_drop import FileDropMonitor
 from .monitors.port_watchdog import PortWatchdog
 from .monitors.process_monitor import ProcessMonitor
+from .monitors.suricata_monitor import SuricataMonitor
 from .monitors.usb_guard import UsbGuard
 from .monitors.yara_scanner import YaraScanner
 from .quarantine import QuarantineManager
@@ -77,6 +78,7 @@ def run() -> None:
     process_monitor = ProcessMonitor(config, telemetry)
     usb_guard = UsbGuard(config, telemetry)
     yara_scanner = YaraScanner(config, telemetry, quarantine)
+    suricata = SuricataMonitor(config, telemetry)
     isolation = IsolationController(config, telemetry)
 
     def _report_result(action_id, status, **extra):
@@ -137,6 +139,7 @@ def run() -> None:
             process_monitor.scan()
             usb_guard.scan()
             yara_scanner.scan()
+            suricata.scan()
 
             now = time.monotonic()
             # Report inventory on the same cadence as check-in.

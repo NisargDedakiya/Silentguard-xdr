@@ -330,6 +330,14 @@ SEED_RULES: tuple[Rule, ...] = (
         matches=lambda ctx: ctx.source == "yara" and ctx.action in ("match", "quarantined"),
         responses=("alert",),
     ),
+    Rule(
+        id="suricata_alert", name="Suricata IDS alert",
+        severity=Severity.HIGH, technique_id="T1071",
+        technique_name="Application Layer Protocol",
+        description="The Suricata network IDS raised an alert (network-side detection).",
+        matches=lambda ctx: ctx.source == "suricata" and ctx.action == "alert",
+        responses=("alert",),
+    ),
 )
 
 RULES_BY_ID: dict[str, Rule] = {r.id: r for r in SEED_RULES}

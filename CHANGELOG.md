@@ -6,6 +6,18 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.4 — TLS certificate pinning (agent)
+
+- **New `agent/silentguard_agent/cert_pinning.py`:** pins the management
+  server's certificate by SHA-256 fingerprint (`SG_PIN_SHA256`). A
+  `FingerprintAdapter` mounts urllib3's `assert_fingerprint` on the agent's HTTP
+  session so a valid-but-rogue CA cert (TLS-inspection proxy, compromised CA) is
+  rejected — requests fail closed on mismatch.
+- **`TelemetryClient` now routes all server calls** (enroll, flush, inventory,
+  check-in) through the pinned `requests.Session`. Unset `SG_PIN_SHA256` keeps
+  default CA verification (unchanged). **Tests:**
+  `agent/tests/test_cert_pinning.py`. **Docs:** `docs/cert-pinning.md`.
+
 ### v1.4 — Multi-factor authentication (TOTP)
 
 - **New `app/core/totp.py`:** dependency-free RFC 6238 TOTP / RFC 4226 HOTP

@@ -14,6 +14,7 @@ from collections import deque
 import requests
 
 from . import __version__
+from .cert_pinning import build_session
 from .config import AgentConfig, load_queue, load_state, save_queue, save_state
 
 log = logging.getLogger("silentguard.telemetry")
@@ -28,6 +29,8 @@ class TelemetryClient:
         self.lock = threading.Lock()
         self.device_id: str | None = None
         self.api_key: str | None = None
+        # HTTP session with optional TLS certificate pinning (v1.4).
+        self.session = build_session(config)
         # Recover any events spooled before a previous shutdown/crash.
         spooled = load_queue()
         if spooled:
@@ -44,7 +47,7 @@ class TelemetryClient:
         if state.get("device_id") and state.get("api_key"):
             self.device_id, self.api_key = state["device_id"], state["api_key"]
             return
-        resp = requests.post(
+        resp = self.session.post(
             f"{self.config.server_url}/api/agent/enroll",
             json={
                 "enroll_token": self.config.enroll_token,
@@ -83,7 +86,7 @@ class TelemetryClient:
                 return
             batch = list(self.buffer)
         try:
-            resp = requests.post(
+            resp = self.session.post(
                 f"{self.config.server_url}/api/agent/telemetry",
                 json={"events": batch},
                 headers={"X-Agent-Key": self.api_key or ""},
@@ -104,7 +107,7 @@ class TelemetryClient:
     def send_inventory(self, report: dict) -> bool:
         """Post a device inventory snapshot. Best-effort; returns success."""
         try:
-            resp = requests.post(
+            resp = self.session.post(
                 f"{self.config.server_url}/api/agent/inventory",
                 json=report,
                 headers={"X-Agent-Key": self.api_key or ""},
@@ -120,7 +123,7 @@ class TelemetryClient:
     # -- check-in ---------------------------------------------------------
     def checkin(self) -> dict | None:
         try:
-            resp = requests.get(
+            resp = self.session.get(
                 f"{self.config.server_url}/api/agent/checkin",
                 headers={"X-Agent-Key": self.api_key or ""},
                 timeout=10,

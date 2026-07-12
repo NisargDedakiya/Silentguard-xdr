@@ -33,8 +33,8 @@ def test_emit_persists_to_disk(spool):
 
 def test_events_survive_restart_while_offline(spool, monkeypatch):
     # First agent instance emits while the server is unreachable.
-    monkeypatch.setattr(requests, "post",
-                        lambda *a, **k: (_ for _ in ()).throw(requests.ConnectionError("down")))
+    monkeypatch.setattr(requests.Session, "post",
+                        lambda self, *a, **k: (_ for _ in ()).throw(requests.ConnectionError("down")))
     c1 = _client()
     c1.emit("port_watchdog", "killed", "killed nc", details={"port": 4444})
     c1.flush()  # fails, events stay spooled
@@ -53,11 +53,11 @@ def test_successful_flush_clears_spool(spool, monkeypatch):
 
     sent = {}
 
-    def fake_post(url, json=None, **kwargs):
+    def fake_post(self, url, json=None, **kwargs):
         sent["events"] = json["events"]
         return _Resp()
 
-    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr(requests.Session, "post", fake_post)
     c = _client()
     c.emit("agent", "heartbeat", "ok")
     c.emit("agent", "heartbeat", "ok2")

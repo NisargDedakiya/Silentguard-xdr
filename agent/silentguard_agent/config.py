@@ -76,6 +76,9 @@ class AgentConfig:
     yara_enabled: bool = os.environ.get("SG_YARA_ENABLED", "0") == "1"
     yara_rules_path: str = os.environ.get("SG_YARA_RULES", "")
     yara_quarantine: bool = os.environ.get("SG_YARA_QUARANTINE", "1") != "0"
+    # TLS certificate pinning (v1.4): SHA-256 fingerprint of the server leaf
+    # cert (hex, colons optional). Empty = default CA verification only.
+    pin_sha256: str = os.environ.get("SG_PIN_SHA256", "")
 
     def __post_init__(self) -> None:
         rep = load_reputation()

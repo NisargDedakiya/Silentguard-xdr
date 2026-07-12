@@ -322,6 +322,14 @@ SEED_RULES: tuple[Rule, ...] = (
                     "ransomware precursor.",
         matches=_is_ransomware_behavior, responses=("alert", "isolate"),
     ),
+    Rule(
+        id="yara_match", name="YARA signature match",
+        severity=Severity.CRITICAL, technique_id="T1105",
+        technique_name="Ingress Tool Transfer",
+        description="A file on disk matched a YARA malware signature.",
+        matches=lambda ctx: ctx.source == "yara" and ctx.action in ("match", "quarantined"),
+        responses=("alert",),
+    ),
 )
 
 RULES_BY_ID: dict[str, Rule] = {r.id: r for r in SEED_RULES}

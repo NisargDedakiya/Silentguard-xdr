@@ -70,6 +70,12 @@ class AgentConfig:
     update_public_key: str = os.environ.get("SG_UPDATE_PUBLIC_KEY", "")
     update_hmac_key: str = os.environ.get("SG_UPDATE_HMAC_KEY", "")
     require_signed_updates: bool = os.environ.get("SG_REQUIRE_SIGNED_UPDATES", "1") != "0"
+    # YARA file scanning (v1.3): scan newly-dropped files against a rule set.
+    # Off unless enabled with a rules path (file or directory of .yar/.yara) and
+    # the yara-python package present; degrades to a no-op otherwise.
+    yara_enabled: bool = os.environ.get("SG_YARA_ENABLED", "0") == "1"
+    yara_rules_path: str = os.environ.get("SG_YARA_RULES", "")
+    yara_quarantine: bool = os.environ.get("SG_YARA_QUARANTINE", "1") != "0"
 
     def __post_init__(self) -> None:
         rep = load_reputation()

@@ -144,6 +144,18 @@ def test_process_telemetry_end_to_end_detections(client, enrolled_device):
     assert {"powershell_abuse", "encoded_command", "lolbin_execution"} <= rule_ids
 
 
+def test_yara_match_telemetry_creates_detection(client, enrolled_device):
+    """A YARA scanner match from the agent creates a critical detection."""
+    _emit(client, enrolled_device["headers"], source="yara", action="quarantined",
+          severity="critical", summary="YARA rule Malware_Generic matched evil.bin",
+          details={"path": "/tmp/evil.bin", "rules": ["Malware_Generic"]})
+    dets = client.get("/api/admin/detections", headers=ADMIN_HEADERS).json()
+    hits = [d for d in dets if d["rule_id"] == "yara_match"]
+    assert len(hits) == 1
+    assert hits[0]["severity"] == "critical"
+    assert hits[0]["technique_id"] == "T1105"
+
+
 def test_auto_isolate_response_when_enabled(client, enrolled_device, monkeypatch):
     from app.core.config import settings
     monkeypatch.setattr(settings, "detection_auto_isolate", True)

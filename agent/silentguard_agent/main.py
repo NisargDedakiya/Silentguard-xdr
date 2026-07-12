@@ -26,6 +26,7 @@ from .monitors.file_drop import FileDropMonitor
 from .monitors.port_watchdog import PortWatchdog
 from .monitors.process_monitor import ProcessMonitor
 from .monitors.usb_guard import UsbGuard
+from .monitors.yara_scanner import YaraScanner
 from .quarantine import QuarantineManager
 from . import response_handlers as handlers
 from .telemetry import TelemetryClient
@@ -75,6 +76,7 @@ def run() -> None:
     file_drop = FileDropMonitor(config, telemetry, quarantine)
     process_monitor = ProcessMonitor(config, telemetry)
     usb_guard = UsbGuard(config, telemetry)
+    yara_scanner = YaraScanner(config, telemetry, quarantine)
     isolation = IsolationController(config, telemetry)
 
     def _report_result(action_id, status, **extra):
@@ -134,6 +136,7 @@ def run() -> None:
             file_drop.scan()
             process_monitor.scan()
             usb_guard.scan()
+            yara_scanner.scan()
 
             now = time.monotonic()
             # Report inventory on the same cadence as check-in.

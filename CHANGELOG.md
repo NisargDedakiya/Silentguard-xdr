@@ -6,6 +6,21 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.3 — YARA file scanning
+
+- **New `agent/silentguard_agent/monitors/yara_scanner.py`:** scans
+  newly-dropped files (the file-drop watch dirs) against a YARA rule set and
+  reports/quarantines matches. Optional and dependency-light — inert unless
+  `SG_YARA_ENABLED` + `SG_YARA_RULES` are set and `yara-python` is installed;
+  every missing piece degrades to a no-op. Baseline-aware, wired into the agent
+  poll loop.
+- **Server:** new built-in `yara_match` detection rule turns a `source="yara"`
+  event into a `critical` detection mapped to T1105, so YARA hits flow through
+  triage/alerting/integrations/AI like any detection.
+- **Config (agent):** `SG_YARA_ENABLED`, `SG_YARA_RULES`, `SG_YARA_QUARANTINE`.
+- **Tests:** `agent/tests/test_yara_scanner.py` (fake compiled rules, no native
+  libyara) and a server ingestion test. **Docs:** `docs/yara.md`.
+
 ### v1.2 — Durable offline telemetry queue
 
 - **Agent `TelemetryClient` now spools its buffer to disk**

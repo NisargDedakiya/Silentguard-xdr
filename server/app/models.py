@@ -190,6 +190,26 @@ class IntelRule(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ResponseAction(Base):
+    """An immutable record of a response action dispatched against a device
+    (M14): kill process, delete/restore file, block indicator, remote scan,
+    isolate/release. Agent-executed actions carry a lifecycle status."""
+
+    __tablename__ = "response_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
+    device_id: Mapped[str | None] = mapped_column(ForeignKey("devices.id"), index=True, nullable=True)
+    action_type: Mapped[str] = mapped_column(String(32), index=True)
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    # queued | completed | failed
+    status: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    actor: Mapped[str] = mapped_column(String(64))
+    result: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    completed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Detection(Base):
     """A behavioral-detection-engine finding (M8): a rule fired on a telemetry
     event. Carries the weighted risk score, ATT&CK technique, and triage

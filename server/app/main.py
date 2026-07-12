@@ -28,6 +28,7 @@ from .routers import (
     auth as auth_router,
     detections as detections_router,
     intel as intel_router,
+    responses as responses_router,
     users as users_router,
 )
 from .services.auth_service import maybe_bootstrap_admin
@@ -93,6 +94,7 @@ app.include_router(auth_router.router)
 app.include_router(users_router.router)
 app.include_router(detections_router.router)
 app.include_router(intel_router.router)
+app.include_router(responses_router.router)
 app.include_router(agents.router)
 app.include_router(admin.router)
 

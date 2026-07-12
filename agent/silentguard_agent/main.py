@@ -26,6 +26,7 @@ from .monitors.file_drop import FileDropMonitor
 from .monitors.port_watchdog import PortWatchdog
 from .monitors.usb_guard import UsbGuard
 from .quarantine import QuarantineManager
+from . import response_handlers as handlers
 from .telemetry import TelemetryClient
 
 log = logging.getLogger("silentguard")
@@ -56,8 +57,17 @@ def run() -> None:
     usb_guard = UsbGuard(config, telemetry)
     isolation = IsolationController(config, telemetry)
 
+    def _report_result(action_id, status, **extra):
+        if action_id is not None:
+            telemetry.emit("response", "result",
+                           f"Response action {action_id} {status}",
+                           severity="info",
+                           details={"action_id": action_id, "status": status, **extra})
+
     def handle_command(cmd: dict) -> None:
-        if cmd.get("command") == "restore_quarantine":
+        command = cmd.get("command")
+        action_id = cmd.get("action_id")
+        if command == "restore_quarantine":
             qid = cmd.get("id", "")
             entry = quarantine.restore(qid)
             if entry:
@@ -66,12 +76,22 @@ def run() -> None:
                     f"Quarantined file restored to {entry['original_path']}",
                     severity="info", details=entry,
                 )
+                _report_result(action_id, "ok", restored=entry["original_path"])
             else:
                 telemetry.emit(
                     "quarantine", "restore_failed",
                     f"Failed to restore quarantine item {qid}",
                     severity="warning", details={"id": qid},
                 )
+                _report_result(action_id, "failed", id=qid)
+        elif command == "kill_process":
+            handlers.kill_process(cmd, telemetry, config, _report_result)
+        elif command == "delete_file":
+            handlers.delete_file(cmd, telemetry, config, quarantine, _report_result)
+        elif command == "remote_scan":
+            handlers.remote_scan(cmd, telemetry, config, _report_result)
+        elif command == "remote_update":
+            handlers.remote_update(cmd, telemetry, _report_result)
 
     running = True
 

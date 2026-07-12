@@ -103,6 +103,26 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ResponseRequest(BaseModel):
+    action: str  # kill_process|delete_file|restore_file|remote_scan|remote_update|
+                 # isolate|release|block_domain|block_ip|block_hash
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResponseActionOut(BaseModel):
+    id: int
+    device_id: Optional[str] = None
+    action_type: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    actor: str
+    result: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime.datetime
+    completed_at: Optional[datetime.datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class InventoryReport(BaseModel):
     os_version: str = ""
     kernel: str = ""

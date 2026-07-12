@@ -90,6 +90,12 @@ async def telemetry(
             device.stopped = False
         if ev.source in ("quarantine", "file_drop"):
             _sync_quarantine(db, device, ev)
+        if ev.source == "response" and ev.action == "result":
+            from ..services import response as response_service
+            details = ev.details or {}
+            if details.get("action_id"):
+                response_service.record_result(
+                    db, int(details["action_id"]), details.get("status", "ok"), details)
 
         row = ThreatEvent(
             device_id=device.id,

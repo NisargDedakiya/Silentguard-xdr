@@ -131,7 +131,18 @@ MVP toward an enterprise XDR platform following the plan in
   isolation). New `GET /api/admin/devices/{id}/inventory` (`read:fleet`,
   org-scoped). Tests: +5 server, +2 agent. Docs: `docs/device-inventory.md`.
 
-**Backward compatibility (M1–M13):** No existing API route or WebSocket event was
+- **M14 — Response action framework:** A unified `POST /api/admin/devices/{id}/
+  respond` dispatches response actions, each recorded as an immutable
+  `ResponseAction` (migration `44af865f5376`) plus an audit entry. Server actions
+  (block_domain/ip/hash) apply immediately; agent actions (kill_process,
+  delete_file, restore_file, remote_scan, remote_update, isolate/release) queue a
+  check-in command correlated by `action_id` and complete when the agent reports
+  a result. New `execute:response` permission (responder set),
+  `GET /api/admin/responses`, agent `response_handlers.py`, and result ingestion.
+  `delete_file` routes through quarantine (recoverable). Tests: +9 server, +6
+  agent. Docs: `docs/response-framework.md`.
+
+**Backward compatibility (M1–M14):** No existing API route or WebSocket event was
 removed; new endpoints are additive and the admin API keeps accepting the legacy
 token. The SQLite demo still auto-creates its schema; production backends run
-`alembic upgrade head`. Suite: **137 server + 35 agent = 172 passing.**
+`alembic upgrade head`. Suite: **146 server + 41 agent = 187 passing.**

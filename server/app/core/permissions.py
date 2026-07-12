@@ -16,6 +16,7 @@ class Permission(str, Enum):
     WRITE_ISOLATION = "write:isolation"    # isolate / release a device
     WRITE_BLOCKLIST = "write:blocklist"    # add / remove blocklist entries
     WRITE_QUARANTINE = "write:quarantine"  # restore a quarantined file
+    EXECUTE_RESPONSE = "execute:response"  # dispatch response actions to a device
     WRITE_DETECTIONS = "write:detections"  # acknowledge / resolve detections
     MANAGE_INTEL = "manage:intel"          # create / delete IOCs and intel rules
     MANAGE_USERS = "manage:users"          # create / list / disable users
@@ -24,7 +25,8 @@ class Permission(str, Enum):
 _ALL = frozenset(Permission)
 _READ = frozenset({Permission.READ_FLEET, Permission.READ_AUDIT})
 _RESPOND = frozenset(
-    {Permission.WRITE_ISOLATION, Permission.WRITE_BLOCKLIST, Permission.WRITE_QUARANTINE}
+    {Permission.WRITE_ISOLATION, Permission.WRITE_BLOCKLIST, Permission.WRITE_QUARANTINE,
+     Permission.EXECUTE_RESPONSE}
 )
 
 _TRIAGE = frozenset({Permission.WRITE_DETECTIONS})

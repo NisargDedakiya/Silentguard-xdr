@@ -33,6 +33,43 @@ class CheckinResponse(BaseModel):
     isolated: bool
     commands: list[dict]
     blocklist: dict[str, list[str]]
+    policy: dict[str, Any] = Field(default_factory=dict)
+
+
+class DeviceGroupCreate(BaseModel):
+    name: str
+    description: str = ""
+
+
+class DeviceGroupOut(BaseModel):
+    id: int
+    name: str
+    description: str
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PolicyCreate(BaseModel):
+    name: str
+    group_id: Optional[int] = None  # None = org default
+    settings: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class PolicyOut(BaseModel):
+    id: int
+    name: str
+    group_id: Optional[int] = None
+    settings: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GroupAssign(BaseModel):
+    group_id: Optional[int] = None  # None to unassign
 
 
 class DeviceOut(BaseModel):

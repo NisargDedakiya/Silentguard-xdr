@@ -32,6 +32,24 @@ from .telemetry import TelemetryClient
 log = logging.getLogger("silentguard")
 
 
+def apply_policy(config: AgentConfig, policy: dict) -> None:
+    """Merge a server-resolved effective policy into the agent config (M16)."""
+    if not policy:
+        return
+    for port in policy.get("suspicious_ports", []):
+        try:
+            config.suspicious_ports.add(int(port))
+        except (TypeError, ValueError):
+            pass
+    config.blocked_processes.update(policy.get("blocked_processes", []))
+    config.blocked_domains.update(policy.get("blocked_domains", []))
+    for d in policy.get("file_drop_dirs", []):
+        if d not in config.file_drop_dirs:
+            config.file_drop_dirs.append(d)
+    if "block_usb_storage" in policy:
+        config.block_usb_storage = bool(policy["block_usb_storage"])
+
+
 def run() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -138,6 +156,8 @@ def run() -> None:
                             config.suspicious_ports.add(int(p))
                         except ValueError:
                             pass
+                    # Apply the effective policy resolved server-side (M16).
+                    apply_policy(config, state.get("policy", {}))
                     if state.get("isolated"):
                         isolation.isolate()
                     else:

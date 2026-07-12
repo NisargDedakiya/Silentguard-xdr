@@ -50,6 +50,14 @@ router = APIRouter(prefix="/api/agent", tags=["agent"])
 async def enroll(req: schemas.EnrollRequest, db: Session = Depends(get_db)):
     if not secrets.compare_digest(req.enroll_token, ENROLL_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid enrollment token")
+    # Licensing placeholder: enforce the org device cap (0 = unlimited).
+    from ..models import Organization
+    org = db.get(Organization, DEFAULT_ORG_ID)
+    if org is not None and org.max_devices > 0:
+        current = db.query(Device).filter(Device.org_id == DEFAULT_ORG_ID).count()
+        if current >= org.max_devices:
+            raise HTTPException(status_code=402,
+                                detail="Device license limit reached for this organization")
     device = Device(
         id=str(uuid.uuid4()),
         org_id=DEFAULT_ORG_ID,
@@ -165,5 +173,8 @@ async def checkin(device: Device = Depends(require_agent), db: Session = Depends
     blocklist: dict[str, list[str]] = {"domain": [], "process": [], "port": []}
     for e in entries:
         blocklist.setdefault(e.kind, []).append(e.value)
+    from ..services.policy import resolve_effective_policy
+    policy = resolve_effective_policy(db, device)
     db.commit()
-    return schemas.CheckinResponse(isolated=device.isolated, commands=commands, blocklist=blocklist)
+    return schemas.CheckinResponse(isolated=device.isolated, commands=commands,
+                                   blocklist=blocklist, policy=policy)

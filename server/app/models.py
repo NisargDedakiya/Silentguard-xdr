@@ -26,6 +26,38 @@ class Organization(Base):
     name: Mapped[str] = mapped_column(String(255))
     slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Licensing placeholders (M16): tier + device cap (0 = unlimited).
+    license_tier: Mapped[str] = mapped_column(String(32), default="community")
+    max_devices: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DeviceGroup(Base):
+    """A named grouping of devices within an org (M16), e.g. a department or a
+    tier. Policies can target a group."""
+
+    __tablename__ = "device_groups"
+    __table_args__ = (UniqueConstraint("org_id", "name", name="uq_group_org_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Policy(Base):
+    """A detection/response policy (M16). A policy with ``group_id`` NULL is the
+    org default; a group-scoped policy overrides it for that group's devices."""
+
+    __tablename__ = "policies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("device_groups.id"), index=True, nullable=True)
+    name: Mapped[str] = mapped_column(String(128))
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -34,6 +66,7 @@ class Device(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("device_groups.id"), index=True, nullable=True)
     hostname: Mapped[str] = mapped_column(String(255))
     platform: Mapped[str] = mapped_column(String(64), default="unknown")
     agent_version: Mapped[str] = mapped_column(String(32), default="0.1.0")

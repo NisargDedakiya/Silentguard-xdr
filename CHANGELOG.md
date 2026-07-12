@@ -161,7 +161,19 @@ MVP toward an enterprise XDR platform following the plan in
   Dispatch wired into telemetry ingestion. Tests: +9
   (`tests/test_integrations.py`). Docs: `docs/integrations.md`.
 
+- **M16 — Policy engine, device groups & licensing:** New `device_groups` and
+  `policies` tables, `devices.group_id`, and `organizations.license_tier`/
+  `max_devices` (migration `94382bb5a702`, server-defaulted for existing rows).
+  `app/services/policy.py` resolves an effective policy (defaults → org-default →
+  group override) delivered in the agent check-in response (`policy`, additive)
+  and applied by the agent's new `apply_policy`. Group/policy CRUD + device
+  assignment under a new `manage:policy` permission (super-admin, SOC manager);
+  `GET /api/admin/devices/{id}/policy` previews the effective policy. Licensing
+  placeholder: enrollment returns 402 at the org device cap. Tests: +6 server,
+  +3 agent. Docs: `docs/policy-engine.md`.
+
 **Backward compatibility (M1–M18):** No existing API route or WebSocket event was
-removed; new endpoints are additive and the admin API keeps accepting the legacy
-token. The SQLite demo still auto-creates its schema; production backends run
-`alembic upgrade head`. Suite: **163 server + 41 agent = 204 passing.**
+removed; new endpoints and the check-in `policy` field are additive, and the
+admin API keeps accepting the legacy token. The SQLite demo still auto-creates
+its schema; production backends run `alembic upgrade head`. Suite: **169 server
++ 44 agent = 213 passing.**

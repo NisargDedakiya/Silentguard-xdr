@@ -24,6 +24,7 @@ from .database import Base, SessionLocal, engine
 from .monitor import run_monitor_loop
 from .routers import admin, agents, auth as auth_router, users as users_router
 from .services.auth_service import maybe_bootstrap_admin
+from .services.tenancy import ensure_default_org
 from .ws import hub
 
 configure_logging(settings.log_level, settings.log_format)
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
     with contextlib.suppress(Exception):
         db = SessionLocal()
         try:
+            ensure_default_org(db)
             maybe_bootstrap_admin(db)
         finally:
             db.close()

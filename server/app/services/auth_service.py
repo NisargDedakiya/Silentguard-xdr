@@ -21,7 +21,7 @@ from ..core.security import (
     hash_password,
     verify_password,
 )
-from ..models import RefreshToken, User, utcnow
+from ..models import DEFAULT_ORG_ID, RefreshToken, User, utcnow
 from ..utils.time import aware_utc
 
 log = get_logger("silentguard.auth")
@@ -68,17 +68,18 @@ def validate_password(password: str) -> None:
         raise AuthError(400, "Password must mix upper/lower case and include a non-letter")
 
 
-def create_user(db: Session, email: str, password: str, role: str = Role.READ_ONLY.value) -> User:
+def create_user(db: Session, email: str, password: str, role: str = Role.READ_ONLY.value,
+                org_id: str = DEFAULT_ORG_ID) -> User:
     email = email.strip().lower()
     if db.query(User).filter(User.email == email).first():
         raise AuthError(409, "A user with that email already exists")
     if role not in {r.value for r in Role}:
         raise AuthError(400, f"Unknown role '{role}'")
     validate_password(password)
-    user = User(email=email, hashed_password=hash_password(password), role=role)
+    user = User(email=email, hashed_password=hash_password(password), role=role, org_id=org_id)
     db.add(user)
     db.commit()
-    log.info("user created", extra={"email": email, "role": role})
+    log.info("user created", extra={"email": email, "role": role, "org_id": org_id})
     return user
 
 

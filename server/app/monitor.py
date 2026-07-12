@@ -38,6 +38,7 @@ async def check_once() -> list[str]:
             device.unresponsive_alerted = True
             event = ThreatEvent(
                 device_id=device.id,
+                org_id=device.org_id,
                 source="agent",
                 severity="critical",
                 action="device_unresponsive",

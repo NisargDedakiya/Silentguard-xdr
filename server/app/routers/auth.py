@@ -15,8 +15,8 @@ def _client_key(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _audit(db: Session, actor: str, action: str, target: str) -> None:
-    db.add(AuditLogEntry(actor=actor, action=action, target=target, details={}))
+def _audit(db: Session, actor: str, action: str, target: str, org_id: str | None = None) -> None:
+    db.add(AuditLogEntry(actor=actor, action=action, target=target, details={}, org_id=org_id))
     db.commit()
 
 
@@ -27,7 +27,7 @@ def login(body: schemas.LoginRequest, request: Request, db: Session = Depends(ge
         tokens = auth_service.issue_tokens(db, user)
     except auth_service.AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-    _audit(db, f"user:{user.id}", "login", user.email)
+    _audit(db, f"user:{user.id}", "login", user.email, org_id=user.org_id)
     return tokens
 
 

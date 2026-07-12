@@ -1,7 +1,7 @@
 import datetime
 import secrets
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -11,10 +11,29 @@ def utcnow() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
 
+# Well-known id of the organization every pre-multi-tenancy row is backfilled
+# into, and the default org new devices/users join. Its presence makes the
+# single-tenant demo behave exactly as before M6.
+DEFAULT_ORG_ID = "00000000000000000000000000000001"
+
+
+class Organization(Base):
+    """A tenant. All domain data is scoped to an organization (M6)."""
+
+    __tablename__ = "organizations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: secrets.token_hex(16))
+    name: Mapped[str] = mapped_column(String(255))
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Device(Base):
     __tablename__ = "devices"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
     hostname: Mapped[str] = mapped_column(String(255))
     platform: Mapped[str] = mapped_column(String(64), default="unknown")
     agent_version: Mapped[str] = mapped_column(String(32), default="0.1.0")
@@ -36,6 +55,7 @@ class ThreatEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), index=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     # port_watchdog | dns_sinkhole | arp_guard | agent | isolation
     source: Mapped[str] = mapped_column(String(32))
@@ -56,6 +76,7 @@ class QuarantineItem(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)  # agent-side quarantine id
     device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), index=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
     original_path: Mapped[str] = mapped_column(Text)
     sha256: Mapped[str] = mapped_column(String(64), default="")
     reason: Mapped[str] = mapped_column(Text, default="")
@@ -74,6 +95,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(secrets.token_hex(16)))
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(32), default="read_only")
@@ -105,6 +127,7 @@ class AuditLogEntry(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     actor: Mapped[str] = mapped_column(String(32))  # admin token fingerprint
     action: Mapped[str] = mapped_column(String(64))
@@ -114,8 +137,12 @@ class AuditLogEntry(Base):
 
 class BlocklistEntry(Base):
     __tablename__ = "blocklist"
+    # Uniqueness is per-organization: the same value may be blocked in several
+    # tenants independently.
+    __table_args__ = (UniqueConstraint("org_id", "value", name="uq_blocklist_org_value"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
     kind: Mapped[str] = mapped_column(String(16))  # domain | process | port
-    value: Mapped[str] = mapped_column(String(255), unique=True)
+    value: Mapped[str] = mapped_column(String(255))
     added_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

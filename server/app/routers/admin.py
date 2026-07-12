@@ -12,6 +12,7 @@ from ..database import get_db
 from ..models import AuditLogEntry, BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
 from ..scoring import compute_score, compute_scores
 from ..services import events
+from ..services.tenancy import owning_org, scope_query
 from ..utils.time import aware_utc
 from ..ws import hub
 
@@ -27,9 +28,11 @@ WriteQuarantine = Depends(require_permission(Permission.WRITE_QUARANTINE))
 ONLINE_WINDOW = datetime.timedelta(seconds=60)
 
 
-def _audit(db: Session, actor: str, action: str, target: str, details: dict | None = None) -> None:
+def _audit(db: Session, actor: str, action: str, target: str,
+           details: dict | None = None, org_id: str | None = None) -> None:
     """Queue an audit row; committed atomically with the action it records."""
-    db.add(AuditLogEntry(actor=actor, action=action, target=target, details=details or {}))
+    db.add(AuditLogEntry(actor=actor, action=action, target=target,
+                         details=details or {}, org_id=org_id))
 
 
 def _device_out(d: Device, score: dict) -> schemas.DeviceOut:
@@ -49,26 +52,37 @@ def _device_out(d: Device, score: dict) -> schemas.DeviceOut:
 
 
 @router.get("/devices", response_model=list[schemas.DeviceOut])
-def list_devices(db: Session = Depends(get_db), _: Principal = ReadFleet):
-    devices = db.query(Device).order_by(Device.enrolled_at).all()
+def list_devices(db: Session = Depends(get_db), principal: Principal = ReadFleet):
+    q = scope_query(db.query(Device), Device.org_id, principal).order_by(Device.enrolled_at)
+    devices = q.all()
     scores = compute_scores(db, [d.id for d in devices])
     return [_device_out(d, scores[d.id]) for d in devices]
 
 
 @router.get("/events", response_model=list[schemas.EventOut])
 def list_events(limit: int = 100, device_id: str | None = None,
-                db: Session = Depends(get_db), _: Principal = ReadFleet):
+                db: Session = Depends(get_db), principal: Principal = ReadFleet):
     q = db.query(ThreatEvent).order_by(ThreatEvent.timestamp.desc(), ThreatEvent.id.desc())
+    q = scope_query(q, ThreatEvent.org_id, principal)
     if device_id:
         q = q.filter(ThreatEvent.device_id == device_id)
     rows = q.limit(min(limit, 500)).all()
     return [events.event_out(r, r.device.hostname if r.device else "") for r in rows]
 
 
-async def _set_isolation(device_id: str, isolated: bool, db: Session, actor: str):
+def _get_device_scoped(db: Session, device_id: str, principal: Principal) -> Device:
+    """Fetch a device, enforcing that a non-cross-org caller stays in its own
+    tenant (a cross-tenant id is treated as not-found, not forbidden)."""
     device = db.get(Device, device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
+    if not principal.cross_org and device.org_id != principal.org_id:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return device
+
+
+async def _set_isolation(device_id: str, isolated: bool, db: Session, principal: Principal):
+    device = _get_device_scoped(db, device_id, principal)
     device.isolated = isolated
     cmds = list(device.pending_commands or [])
     cmds.append({"command": "isolate" if isolated else "release"})
@@ -77,14 +91,15 @@ async def _set_isolation(device_id: str, isolated: bool, db: Session, actor: str
     db.add(
         ThreatEvent(
             device_id=device.id,
+            org_id=device.org_id,
             source="isolation",
             severity="critical" if isolated else "info",
             action=action,
             summary=f"Admin {'isolated' if isolated else 'released'} device {device.hostname}",
         )
     )
-    _audit(db, actor, "isolate" if isolated else "release", device.id,
-           {"hostname": device.hostname})
+    _audit(db, principal.actor, "isolate" if isolated else "release", device.id,
+           {"hostname": device.hostname}, org_id=device.org_id)
     db.commit()
     await hub.broadcast({"type": "isolation", "device_id": device.id, "isolated": isolated})
     if isolated:
@@ -103,26 +118,26 @@ async def _set_isolation(device_id: str, isolated: bool, db: Session, actor: str
 @router.post("/devices/{device_id}/isolate")
 async def isolate_device(device_id: str, db: Session = Depends(get_db),
                          principal: Principal = WriteIsolation):
-    return await _set_isolation(device_id, True, db, principal.actor)
+    return await _set_isolation(device_id, True, db, principal)
 
 
 @router.post("/devices/{device_id}/release")
 async def release_device(device_id: str, db: Session = Depends(get_db),
                          principal: Principal = WriteIsolation):
-    return await _set_isolation(device_id, False, db, principal.actor)
+    return await _set_isolation(device_id, False, db, principal)
 
 
 @router.get("/devices/{device_id}/score")
-def device_score(device_id: str, db: Session = Depends(get_db), _: Principal = ReadFleet):
-    if db.get(Device, device_id) is None:
-        raise HTTPException(status_code=404, detail="Device not found")
+def device_score(device_id: str, db: Session = Depends(get_db), principal: Principal = ReadFleet):
+    _get_device_scoped(db, device_id, principal)
     return compute_score(db, device_id)
 
 
 @router.get("/quarantine", response_model=list[schemas.QuarantineOut])
 def list_quarantine(device_id: str | None = None, db: Session = Depends(get_db),
-                    _: Principal = ReadFleet):
+                    principal: Principal = ReadFleet):
     q = db.query(QuarantineItem).order_by(QuarantineItem.quarantined_at.desc())
+    q = scope_query(q, QuarantineItem.org_id, principal)
     if device_id:
         q = q.filter(QuarantineItem.device_id == device_id)
     items = q.all()
@@ -153,7 +168,7 @@ async def restore_quarantine(item_id: str, db: Session = Depends(get_db),
     """Queue a restore command; the agent executes it on next check-in."""
     actor = principal.actor
     item = db.get(QuarantineItem, item_id)
-    if item is None:
+    if item is None or (not principal.cross_org and item.org_id != principal.org_id):
         raise HTTPException(status_code=404, detail="Quarantine item not found")
     if item.status == "restored":
         raise HTTPException(status_code=409, detail="Item already restored")
@@ -167,6 +182,7 @@ async def restore_quarantine(item_id: str, db: Session = Depends(get_db),
     db.add(
         ThreatEvent(
             device_id=device.id,
+            org_id=device.org_id,
             source="quarantine",
             severity="info",
             action="restore_requested",
@@ -175,17 +191,19 @@ async def restore_quarantine(item_id: str, db: Session = Depends(get_db),
         )
     )
     _audit(db, actor, "quarantine_restore", item.id,
-           {"device_id": device.id, "original_path": item.original_path, "sha256": item.sha256})
+           {"device_id": device.id, "original_path": item.original_path, "sha256": item.sha256},
+           org_id=item.org_id)
     db.commit()
     await hub.broadcast({"type": "quarantine_updated", "id": item.id, "status": item.status})
     return {"id": item.id, "status": item.status}
 
 
 @router.get("/blocklist")
-def get_blocklist(db: Session = Depends(get_db), _: Principal = ReadFleet):
+def get_blocklist(db: Session = Depends(get_db), principal: Principal = ReadFleet):
+    q = scope_query(db.query(BlocklistEntry), BlocklistEntry.org_id, principal)
     return [
         {"id": e.id, "kind": e.kind, "value": e.value, "added_at": e.added_at}
-        for e in db.query(BlocklistEntry).order_by(BlocklistEntry.added_at.desc()).all()
+        for e in q.order_by(BlocklistEntry.added_at.desc()).all()
     ]
 
 
@@ -193,14 +211,17 @@ def get_blocklist(db: Session = Depends(get_db), _: Principal = ReadFleet):
 async def add_blocklist(entry: schemas.BlocklistAdd, db: Session = Depends(get_db),
                         principal: Principal = WriteBlocklist):
     actor = principal.actor
+    org_id = owning_org(principal)
     if entry.kind not in ("domain", "process", "port"):
         raise HTTPException(status_code=400, detail="kind must be domain, process or port")
-    exists = db.query(BlocklistEntry).filter(BlocklistEntry.value == entry.value).first()
+    exists = db.query(BlocklistEntry).filter(
+        BlocklistEntry.value == entry.value, BlocklistEntry.org_id == org_id
+    ).first()
     if exists:
         raise HTTPException(status_code=409, detail="Entry already exists")
-    row = BlocklistEntry(kind=entry.kind, value=entry.value)
+    row = BlocklistEntry(kind=entry.kind, value=entry.value, org_id=org_id)
     db.add(row)
-    _audit(db, actor, "blocklist_add", entry.value, {"kind": entry.kind})
+    _audit(db, actor, "blocklist_add", entry.value, {"kind": entry.kind}, org_id=org_id)
     db.commit()
     await hub.broadcast({"type": "blocklist_updated", "kind": entry.kind, "value": entry.value})
     return {"id": row.id, "kind": row.kind, "value": row.value}
@@ -210,20 +231,21 @@ async def add_blocklist(entry: schemas.BlocklistAdd, db: Session = Depends(get_d
 def delete_blocklist(entry_id: int, db: Session = Depends(get_db),
                      principal: Principal = WriteBlocklist):
     row = db.get(BlocklistEntry, entry_id)
-    if row is None:
+    if row is None or (not principal.cross_org and row.org_id != principal.org_id):
         raise HTTPException(status_code=404, detail="Entry not found")
     db.delete(row)
-    _audit(db, principal.actor, "blocklist_remove", row.value, {"kind": row.kind, "entry_id": entry_id})
+    _audit(db, principal.actor, "blocklist_remove", row.value,
+           {"kind": row.kind, "entry_id": entry_id}, org_id=row.org_id)
     db.commit()
     return {"deleted": entry_id}
 
 
 @router.get("/audit", response_model=list[schemas.AuditOut])
-def list_audit(limit: int = 100, db: Session = Depends(get_db), _: Principal = ReadAudit):
+def list_audit(limit: int = 100, db: Session = Depends(get_db), principal: Principal = ReadAudit):
     """Read-only audit trail of admin actions, newest first."""
+    q = scope_query(db.query(AuditLogEntry), AuditLogEntry.org_id, principal)
     rows = (
-        db.query(AuditLogEntry)
-        .order_by(AuditLogEntry.timestamp.desc(), AuditLogEntry.id.desc())
+        q.order_by(AuditLogEntry.timestamp.desc(), AuditLogEntry.id.desc())
         .limit(min(limit, 500))
         .all()
     )

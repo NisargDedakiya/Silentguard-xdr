@@ -76,8 +76,20 @@ MVP toward an enterprise XDR platform following the plan in
   integrations are unaffected. Tests: +10 (`tests/test_rbac.py`). Docs:
   `docs/rbac.md`.
 
-**Backward compatibility (M1–M5):** No existing API route, request/response
+- **M6 — Multi-tenancy:** All domain data is now scoped to an organization.
+  New `organizations` table and nullable `org_id` on `devices`, `threat_events`,
+  `quarantine_items`, `blocklist`, `audit_log`, `users` (migration
+  `3976409257c3`, which creates a default org and **backfills all existing rows**
+  into it — verified against a pre-M6 seeded database). Reads/writes are
+  org-scoped via `app/services/tenancy.py`; super-admins and the legacy admin
+  token are cross-org (unchanged single-admin view). Cross-tenant object access
+  returns 404 (no existence leak). Agents enroll into the default org and
+  receive only their org's blocklist; blocklist uniqueness is now per-org.
+  Tests: +7 (`tests/test_tenancy.py`). Docs: `docs/multi-tenancy.md`.
+
+**Backward compatibility (M1–M6):** No existing API route, request/response
 schema, or WebSocket event changed; the admin API keeps accepting the legacy
-token (now with full super-admin permissions). The SQLite demo still
-auto-creates its schema; production backends run `alembic upgrade head` (Compose
-does this automatically). Suite: **87 server + 33 agent = 120 passing.**
+token (full super-admin, cross-org). The SQLite demo still auto-creates its
+schema; production backends run `alembic upgrade head` (Compose does this
+automatically) and existing data is backfilled into the default org. Suite:
+**94 server + 33 agent = 127 passing.**

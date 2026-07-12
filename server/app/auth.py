@@ -40,13 +40,16 @@ def _bearer_token(authorization: str) -> str | None:
 
 @dataclass(frozen=True)
 class Principal:
-    """The authenticated caller of an admin request: an audit actor string and
-    the role used for RBAC checks. A JWT resolves to the user's role; the legacy
-    admin token resolves to SUPER_ADMIN for backward compatibility."""
+    """The authenticated caller of an admin request: an audit actor string, the
+    role used for RBAC checks, and the tenant scope. A JWT resolves to the
+    user's role/org; the legacy admin token resolves to a cross-org SUPER_ADMIN
+    for backward compatibility (sees every organization)."""
 
     actor: str
     role: Role
     user_id: str | None = None
+    org_id: str | None = None
+    cross_org: bool = False
 
 
 def current_principal(
@@ -69,10 +72,14 @@ def current_principal(
             role = Role(user.role)
         except ValueError:
             role = Role.READ_ONLY
-        return Principal(actor=f"user:{user.id}", role=role, user_id=user.id)
+        # Super-admins operate across all organizations; other roles are scoped
+        # to their own org.
+        return Principal(actor=f"user:{user.id}", role=role, user_id=user.id,
+                         org_id=user.org_id, cross_org=(role == Role.SUPER_ADMIN))
 
     if ADMIN_TOKEN and secrets.compare_digest(x_admin_token, ADMIN_TOKEN):
-        return Principal(actor=token_fingerprint(x_admin_token), role=Role.SUPER_ADMIN)
+        return Principal(actor=token_fingerprint(x_admin_token), role=Role.SUPER_ADMIN,
+                         cross_org=True)
 
     raise HTTPException(status_code=401, detail="Invalid admin token")
 

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from .. import alerting, schemas
 from ..auth import ENROLL_TOKEN, require_agent
 from ..database import get_db
-from ..models import BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
+from ..models import DEFAULT_ORG_ID, BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
 from ..services import events
 from ..ws import hub
 
@@ -25,6 +25,7 @@ def _sync_quarantine(db: Session, device: Device, ev: schemas.TelemetryEvent) ->
                 QuarantineItem(
                     id=qid,
                     device_id=device.id,
+                    org_id=device.org_id,
                     original_path=details.get("original_path", ""),
                     sha256=details.get("sha256") or "",
                     reason=details.get("reason", ""),
@@ -50,6 +51,7 @@ async def enroll(req: schemas.EnrollRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid enrollment token")
     device = Device(
         id=str(uuid.uuid4()),
+        org_id=DEFAULT_ORG_ID,
         hostname=req.hostname,
         platform=req.platform,
         agent_version=req.agent_version,
@@ -58,6 +60,7 @@ async def enroll(req: schemas.EnrollRequest, db: Session = Depends(get_db)):
     db.add(
         ThreatEvent(
             device_id=device.id,
+            org_id=device.org_id,
             source="agent",
             severity="info",
             action="enrolled",
@@ -89,6 +92,7 @@ async def telemetry(
 
         row = ThreatEvent(
             device_id=device.id,
+            org_id=device.org_id,
             timestamp=ev.timestamp or utcnow(),
             source=ev.source,
             severity=ev.severity,
@@ -114,7 +118,10 @@ async def checkin(device: Device = Depends(require_agent), db: Session = Depends
     device.unresponsive_alerted = False
     commands = list(device.pending_commands or [])
     device.pending_commands = []
-    entries = db.query(BlocklistEntry).all()
+    # An agent receives its own organization's blocklist.
+    entries = db.query(BlocklistEntry).filter(
+        BlocklistEntry.org_id == (device.org_id or DEFAULT_ORG_ID)
+    ).all()
     blocklist: dict[str, list[str]] = {"domain": [], "process": [], "port": []}
     for e in entries:
         blocklist.setdefault(e.kind, []).append(e.value)

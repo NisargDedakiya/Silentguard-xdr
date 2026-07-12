@@ -19,6 +19,7 @@ class Permission(str, Enum):
     EXECUTE_RESPONSE = "execute:response"  # dispatch response actions to a device
     WRITE_DETECTIONS = "write:detections"  # acknowledge / resolve detections
     MANAGE_INTEL = "manage:intel"          # create / delete IOCs and intel rules
+    MANAGE_INTEGRATIONS = "manage:integrations"  # SIEM/SOAR/webhook destinations
     MANAGE_USERS = "manage:users"          # create / list / disable users
 
 
@@ -31,10 +32,11 @@ _RESPOND = frozenset(
 
 _TRIAGE = frozenset({Permission.WRITE_DETECTIONS})
 _INTEL = frozenset({Permission.MANAGE_INTEL})
+_INTEGRATIONS = frozenset({Permission.MANAGE_INTEGRATIONS})
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.SUPER_ADMIN: _ALL,
-    Role.SOC_MANAGER: _READ | _RESPOND | _TRIAGE | _INTEL,
+    Role.SOC_MANAGER: _READ | _RESPOND | _TRIAGE | _INTEL | _INTEGRATIONS,
     Role.ANALYST: _READ | _TRIAGE,
     Role.THREAT_HUNTER: _READ | _TRIAGE | _INTEL,
     Role.RESPONDER: frozenset({Permission.READ_FLEET}) | _RESPOND | _TRIAGE,

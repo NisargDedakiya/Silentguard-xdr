@@ -103,6 +103,26 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class IntegrationCreate(BaseModel):
+    name: str
+    kind: str  # webhook|slack|teams|discord|splunk_hec|syslog
+    config: dict[str, Any] = Field(default_factory=dict)
+    min_severity: str = "critical"
+    enabled: bool = True
+
+
+class IntegrationOut(BaseModel):
+    id: int
+    name: str
+    kind: str
+    config: dict[str, Any] = Field(default_factory=dict)
+    min_severity: str
+    enabled: bool
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ResponseRequest(BaseModel):
     action: str  # kill_process|delete_file|restore_file|remote_scan|remote_update|
                  # isolate|release|block_domain|block_ip|block_hash

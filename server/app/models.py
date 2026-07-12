@@ -190,6 +190,23 @@ class IntelRule(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class Integration(Base):
+    """An outbound integration destination (M18): SIEM/SOAR/chat/syslog. Events
+    and detections at or above ``min_severity`` are forwarded best-effort."""
+
+    __tablename__ = "integrations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
+    name: Mapped[str] = mapped_column(String(128))
+    # webhook|slack|teams|discord|splunk_hec|syslog
+    kind: Mapped[str] = mapped_column(String(24))
+    config: Mapped[dict] = mapped_column(JSON, default=dict)  # url/token/host/port/…
+    min_severity: Mapped[str] = mapped_column(String(16), default="critical")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class ResponseAction(Base):
     """An immutable record of a response action dispatched against a device
     (M14): kill process, delete/restore file, block indicator, remote scan,

@@ -150,7 +150,18 @@ MVP toward an enterprise XDR platform following the plan in
   pid/ppid. No schema change; aggregation done in Python for SQLite/Postgres
   portability. Tests: +8 (`tests/test_analytics.py`). Docs: `docs/visibility.md`.
 
-**Backward compatibility (M1–M17):** No existing API route or WebSocket event was
+- **M18 — Platform integrations & exports:** Configurable per-org outbound
+  integrations (`integrations` table, migration `36c93274741b`) forwarding events
+  and detections to webhook/Slack/Teams/Discord/Splunk-HEC/syslog-CEF
+  destinations above a `min_severity` threshold — best-effort, non-blocking
+  (`app/services/integrations.py` with generic/chat/Splunk/CEF formatters).
+  Management API `/api/admin/integrations` (+ `/test`) behind a new
+  `manage:integrations` permission (super-admin, SOC manager). REST export
+  `GET /api/admin/export/events?format=ndjson|cef` for SIEM pull ingestion.
+  Dispatch wired into telemetry ingestion. Tests: +9
+  (`tests/test_integrations.py`). Docs: `docs/integrations.md`.
+
+**Backward compatibility (M1–M18):** No existing API route or WebSocket event was
 removed; new endpoints are additive and the admin API keeps accepting the legacy
 token. The SQLite demo still auto-creates its schema; production backends run
-`alembic upgrade head`. Suite: **154 server + 41 agent = 195 passing.**
+`alembic upgrade head`. Suite: **163 server + 41 agent = 204 passing.**

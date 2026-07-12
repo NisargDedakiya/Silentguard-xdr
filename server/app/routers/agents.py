@@ -118,13 +118,18 @@ async def telemetry(
     if detections:
         db.commit()
 
+    from ..services import integrations as integ_service
+
     for row in stored:
         payload = events.broadcast_payload(row, device.hostname)
         await hub.broadcast(payload)
         await alerting.notify_critical(payload)
+        integ_service.dispatch(db, device.org_id, payload)
     for det in detections:
-        await hub.broadcast(detection_engine.detection_payload(det, device.hostname))
+        det_payload = detection_engine.detection_payload(det, device.hostname)
+        await hub.broadcast(det_payload)
         await detection_engine.dispatch_responses(db, det, device)
+        integ_service.dispatch(db, det.org_id, det_payload)
     return {"accepted": len(stored), "detections": len(detections)}
 
 

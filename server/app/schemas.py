@@ -103,6 +103,51 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class IOCCreate(BaseModel):
+    ioc_type: str  # domain|ip|url|sha256|certificate
+    value: str
+    confidence: int = 50
+    source: str = "manual"
+    description: str = ""
+    expires_at: Optional[datetime.datetime] = None
+
+
+class IOCImport(BaseModel):
+    source: str = "import"
+    iocs: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class IOCOut(BaseModel):
+    id: int
+    ioc_type: str
+    value: str
+    confidence: int
+    source: str
+    description: str
+    expires_at: Optional[datetime.datetime] = None
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class IntelRuleCreate(BaseModel):
+    kind: str  # yara|sigma
+    name: str
+    content: str
+    enabled: bool = True
+
+
+class IntelRuleOut(BaseModel):
+    id: int
+    kind: str
+    name: str
+    content: str
+    enabled: bool
+    created_at: datetime.datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DetectionOut(BaseModel):
     id: int
     device_id: str

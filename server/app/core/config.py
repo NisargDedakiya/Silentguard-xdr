@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # Sliding-window login rate limit (per client IP): N attempts per window.
     login_rate_limit: int = Field(default=10, alias="SG_LOGIN_RATE_LIMIT")
     login_rate_window_seconds: int = Field(default=60, alias="SG_LOGIN_RATE_WINDOW")
+    # Threat intel: optional local JSON feed file imported into the default org
+    # on startup (a scheduled job can re-run the same import for auto-update).
+    intel_feed_file: str = Field(default="", alias="SG_INTEL_FEED_FILE")
+
     # Detection engine: when enabled, a critical detection whose rule includes
     # the "isolate" response auto-isolates the device. Off by default (safe).
     detection_auto_isolate: bool = Field(default=False, alias="SG_DETECTION_AUTO_ISOLATE")

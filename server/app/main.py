@@ -27,6 +27,7 @@ from .routers import (
     agents,
     auth as auth_router,
     detections as detections_router,
+    intel as intel_router,
     users as users_router,
 )
 from .services.auth_service import maybe_bootstrap_admin
@@ -54,6 +55,12 @@ async def lifespan(app: FastAPI):
         try:
             ensure_default_org(db)
             maybe_bootstrap_admin(db)
+            if settings.intel_feed_file:
+                from .models import DEFAULT_ORG_ID
+                from .services import threat_intel
+                entries = threat_intel.load_feed_file(settings.intel_feed_file)
+                if entries:
+                    threat_intel.import_iocs(db, DEFAULT_ORG_ID, entries, "startup-feed")
         finally:
             db.close()
     task = asyncio.create_task(run_monitor_loop())
@@ -85,6 +92,7 @@ register_error_handlers(app)
 app.include_router(auth_router.router)
 app.include_router(users_router.router)
 app.include_router(detections_router.router)
+app.include_router(intel_router.router)
 app.include_router(agents.router)
 app.include_router(admin.router)
 

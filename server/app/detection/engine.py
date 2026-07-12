@@ -10,6 +10,7 @@ from .. import alerting
 from ..core.config import settings
 from ..core.logging import get_logger
 from ..models import Detection, Device, ThreatEvent
+from ..services import threat_intel
 from .rules import RULES_BY_ID, SEED_RULES, EventContext, Rule
 
 log = get_logger("silentguard.detection")
@@ -40,6 +41,35 @@ def evaluate_event(db: Session, device: Device, event: ThreatEvent) -> list[Dete
             technique_name=rule.technique_name,
             status="new",
             details={"summary": event.summary, "responses": list(rule.responses)},
+        )
+        db.add(det)
+        detections.append(det)
+
+    detections.extend(_evaluate_iocs(db, device, event))
+    return detections
+
+
+def _evaluate_iocs(db: Session, device: Device, event: ThreatEvent) -> list[Detection]:
+    """Match indicators in the event against the org's threat-intel store."""
+    detections: list[Detection] = []
+    for ioc_type, value in threat_intel.extract_indicators(event.details):
+        try:
+            hit = threat_intel.lookup(db, event.org_id, ioc_type, value)
+        except Exception:  # noqa: BLE001
+            log.exception("ioc lookup error", extra={"ioc_type": ioc_type})
+            continue
+        if hit is None:
+            continue
+        technique_id, technique_name = threat_intel.IOC_TECHNIQUE.get(
+            ioc_type, ("T1071", "Application Layer Protocol"))
+        severity = "critical" if hit.confidence >= 80 else "high" if hit.confidence >= 50 else "medium"
+        det = Detection(
+            org_id=event.org_id, device_id=device.id, event_id=event.id,
+            rule_id="ioc_match", name=f"Known-bad {ioc_type} indicator",
+            severity=severity, risk_score=min(100, hit.confidence),
+            technique_id=technique_id, technique_name=technique_name, status="new",
+            details={"ioc_type": ioc_type, "value": hit.value, "source": hit.source,
+                     "confidence": hit.confidence, "responses": ["alert"]},
         )
         db.add(det)
         detections.append(det)

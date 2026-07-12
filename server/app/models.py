@@ -135,6 +135,38 @@ class AuditLogEntry(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class IOC(Base):
+    """Indicator of compromise (M10). Org-scoped, with confidence and optional
+    expiration; imported from feeds or managed manually."""
+
+    __tablename__ = "iocs"
+    __table_args__ = (UniqueConstraint("org_id", "ioc_type", "value", name="uq_ioc_org_type_value"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
+    ioc_type: Mapped[str] = mapped_column(String(16), index=True)  # domain|ip|url|sha256|certificate
+    value: Mapped[str] = mapped_column(String(512), index=True)
+    confidence: Mapped[int] = mapped_column(Integer, default=50)  # 0-100
+    source: Mapped[str] = mapped_column(String(128), default="manual")
+    description: Mapped[str] = mapped_column(Text, default="")
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class IntelRule(Base):
+    """A distributable YARA or Sigma rule (M10). Served to agents/consumers."""
+
+    __tablename__ = "intel_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
+    kind: Mapped[str] = mapped_column(String(8))  # yara|sigma
+    name: Mapped[str] = mapped_column(String(255))
+    content: Mapped[str] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Detection(Base):
     """A behavioral-detection-engine finding (M8): a rule fired on a telemetry
     event. Carries the weighted risk score, ATT&CK technique, and triage

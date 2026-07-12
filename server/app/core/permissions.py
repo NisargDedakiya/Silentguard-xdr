@@ -17,6 +17,7 @@ class Permission(str, Enum):
     WRITE_BLOCKLIST = "write:blocklist"    # add / remove blocklist entries
     WRITE_QUARANTINE = "write:quarantine"  # restore a quarantined file
     WRITE_DETECTIONS = "write:detections"  # acknowledge / resolve detections
+    MANAGE_INTEL = "manage:intel"          # create / delete IOCs and intel rules
     MANAGE_USERS = "manage:users"          # create / list / disable users
 
 
@@ -27,12 +28,13 @@ _RESPOND = frozenset(
 )
 
 _TRIAGE = frozenset({Permission.WRITE_DETECTIONS})
+_INTEL = frozenset({Permission.MANAGE_INTEL})
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.SUPER_ADMIN: _ALL,
-    Role.SOC_MANAGER: _READ | _RESPOND | _TRIAGE,
+    Role.SOC_MANAGER: _READ | _RESPOND | _TRIAGE | _INTEL,
     Role.ANALYST: _READ | _TRIAGE,
-    Role.THREAT_HUNTER: _READ | _TRIAGE,
+    Role.THREAT_HUNTER: _READ | _TRIAGE | _INTEL,
     Role.RESPONDER: frozenset({Permission.READ_FLEET}) | _RESPOND | _TRIAGE,
     Role.AUDITOR: _READ,
     Role.READ_ONLY: frozenset({Permission.READ_FLEET}),

@@ -111,8 +111,20 @@ MVP toward an enterprise XDR platform following the plan in
   command line + serialized details). Critical rules carry the `isolate`
   response (still gated). Tests: +18 (`tests/test_detection_packs.py`).
 
-**Backward compatibility (M1–M9):** No existing API route or WebSocket event was
+- **M10 — Threat intelligence / IOC service:** Org-scoped IOC store
+  (`iocs` table: domain/ip/url/sha256/certificate, confidence, source,
+  expiration) and YARA/Sigma rule distribution (`intel_rules` table); migration
+  `d54bd0f431a1`. New `app/services/threat_intel.py` (upsert, import, expiring
+  lookup, prune, indicator extraction, feed-file loader) and
+  `/api/admin/intel/*` endpoints behind a new `manage:intel` permission
+  (super-admin, SOC manager, threat hunter). The detection engine now extracts
+  indicators from every event and raises `ioc_match` detections (severity from
+  confidence, ATT&CK by type). Optional startup feed import via
+  `SG_INTEL_FEED_FILE`. Tests: +9 (`tests/test_intel.py`). Docs:
+  `docs/threat-intel.md`.
+
+**Backward compatibility (M1–M10):** No existing API route or WebSocket event was
 removed; the telemetry response is additively extended (`detections` count), and
 the admin API keeps accepting the legacy token. The SQLite demo still
 auto-creates its schema; production backends run `alembic upgrade head`. Suite:
-**123 server + 33 agent = 156 passing.**
+**132 server + 33 agent = 165 passing.**

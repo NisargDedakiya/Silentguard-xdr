@@ -2,7 +2,9 @@
 
 Events are queued locally and flushed in batches; if the server is
 unreachable, events stay buffered (bounded) so nothing is lost during
-connectivity gaps.
+connectivity gaps. The buffer is also **spooled to disk** (v1.2) so it survives
+an agent restart while offline — an endpoint that reboots mid-outage still
+delivers everything it captured once connectivity returns.
 """
 import datetime
 import logging
@@ -12,7 +14,7 @@ from collections import deque
 import requests
 
 from . import __version__
-from .config import AgentConfig, load_state, save_state
+from .config import AgentConfig, load_queue, load_state, save_queue, save_state
 
 log = logging.getLogger("silentguard.telemetry")
 
@@ -26,6 +28,15 @@ class TelemetryClient:
         self.lock = threading.Lock()
         self.device_id: str | None = None
         self.api_key: str | None = None
+        # Recover any events spooled before a previous shutdown/crash.
+        spooled = load_queue()
+        if spooled:
+            self.buffer.extend(spooled[-MAX_BUFFER:])
+            log.info("Recovered %d spooled telemetry events", len(self.buffer))
+
+    def _persist_locked(self) -> None:
+        """Persist the current buffer to the offline spool. Caller holds lock."""
+        save_queue(list(self.buffer))
 
     # -- enrollment -------------------------------------------------------
     def ensure_enrolled(self) -> None:
@@ -63,6 +74,7 @@ class TelemetryClient:
         }
         with self.lock:
             self.buffer.append(event)
+            self._persist_locked()
         log.info("[%s/%s] %s", source, severity, summary)
 
     def flush(self) -> None:
@@ -85,6 +97,8 @@ class TelemetryClient:
         with self.lock:
             for _ in range(min(len(batch), len(self.buffer))):
                 self.buffer.popleft()
+            # Shrink the on-disk spool to match the delivered state.
+            self._persist_locked()
 
     # -- inventory --------------------------------------------------------
     def send_inventory(self, report: dict) -> bool:

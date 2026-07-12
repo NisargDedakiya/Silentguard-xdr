@@ -14,6 +14,9 @@ from pathlib import Path
 STATE_DIR = Path(os.environ.get("SG_STATE_DIR", Path.home() / ".silentguard"))
 STATE_FILE = STATE_DIR / "agent_state.json"
 REPUTATION_FILE = STATE_DIR / "reputation.json"
+# Durable offline telemetry spool: events survive an agent restart during a
+# connectivity gap so nothing is lost.
+QUEUE_FILE = STATE_DIR / "telemetry_queue.json"
 
 # SHA-256 of the EICAR standard antivirus test file — a safe, universally
 # recognized "known bad" for demos and tests.
@@ -95,5 +98,24 @@ def save_state(state: dict) -> None:
     STATE_FILE.write_text(json.dumps(state))
     try:
         os.chmod(STATE_FILE, 0o600)
+    except OSError:
+        pass
+
+
+def load_queue() -> list:
+    """Load the persisted offline telemetry spool (empty on any error)."""
+    try:
+        data = json.loads(QUEUE_FILE.read_text())
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def save_queue(events: list) -> None:
+    """Persist the offline telemetry spool (best-effort, owner-only perms)."""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        QUEUE_FILE.write_text(json.dumps(events))
+        os.chmod(QUEUE_FILE, 0o600)
     except OSError:
         pass

@@ -6,6 +6,19 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.2 — Durable offline telemetry queue
+
+- **Agent `TelemetryClient` now spools its buffer to disk**
+  (`~/.silentguard/telemetry_queue.json`, `0600`), so events captured during a
+  connectivity gap survive an agent restart or device reboot — previously the
+  in-memory buffer was lost on exit. The spool is rewritten on every `emit`,
+  recovered on startup, shrunk after a successful flush, and bounded to
+  `MAX_BUFFER` (5000). Persistence is best-effort so telemetry capture never
+  fails on a disk error.
+- **Config:** `config.load_queue` / `config.save_queue` helpers; spool path
+  honors `SG_STATE_DIR`. **Tests:** `agent/tests/test_telemetry_queue.py`.
+  **Docs:** `docs/offline-queue.md`.
+
 ### v1.3 — Sigma rule evaluation
 
 - **New `app/detection/sigma.py`:** compiles operator-supplied Sigma rules into

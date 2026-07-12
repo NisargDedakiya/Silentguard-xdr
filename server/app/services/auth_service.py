@@ -118,6 +118,65 @@ def authenticate(db: Session, email: str, password: str, client_key: str = "") -
     return user
 
 
+# -- multi-factor authentication (TOTP) -----------------------------------
+def mfa_begin_setup(db: Session, user: User) -> dict:
+    """Generate (or reuse a pending) TOTP secret and return the enrolment data.
+    The secret is stored but not enforced until confirmed via mfa_activate."""
+    from ..core.totp import generate_secret, provisioning_uri
+
+    if not user.mfa_secret or user.mfa_enabled:
+        # New secret for a fresh setup; re-enrolling issues a new one too.
+        user.mfa_secret = generate_secret()
+        user.mfa_enabled = False
+        db.commit()
+    return {
+        "secret": user.mfa_secret,
+        "otpauth_uri": provisioning_uri(user.mfa_secret, user.email),
+    }
+
+
+def mfa_activate(db: Session, user: User, code: str) -> None:
+    """Confirm a pending TOTP secret with a valid code and enable MFA."""
+    from ..core.totp import verify
+
+    if not user.mfa_secret:
+        raise AuthError(400, "No MFA setup in progress")
+    if not verify(user.mfa_secret, code):
+        raise AuthError(401, "Invalid MFA code")
+    user.mfa_enabled = True
+    db.commit()
+    log.info("mfa enabled", extra={"email": user.email})
+
+
+def mfa_disable(db: Session, user: User, code: str) -> None:
+    """Disable MFA after verifying a current code (so a stolen session alone
+    cannot turn it off)."""
+    from ..core.totp import verify
+
+    if not user.mfa_enabled or not user.mfa_secret:
+        raise AuthError(400, "MFA is not enabled")
+    if not verify(user.mfa_secret, code):
+        raise AuthError(401, "Invalid MFA code")
+    user.mfa_enabled = False
+    user.mfa_secret = None
+    db.commit()
+    log.info("mfa disabled", extra={"email": user.email})
+
+
+def enforce_mfa(user: User, code: str | None) -> None:
+    """At login: if the user has MFA enabled, require a valid TOTP code.
+    Raises AuthError(401) with a distinct detail when the code is missing so the
+    client can prompt for it."""
+    from ..core.totp import verify
+
+    if not user.mfa_enabled:
+        return
+    if not code:
+        raise AuthError(401, "MFA code required")
+    if not verify(user.mfa_secret or "", code):
+        raise AuthError(401, "Invalid MFA code")
+
+
 # -- tokens ---------------------------------------------------------------
 def issue_tokens(db: Session, user: User) -> dict:
     access = create_access_token(subject=user.id, role=user.role, extra={"email": user.email})

@@ -6,6 +6,20 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.4 — Multi-factor authentication (TOTP)
+
+- **New `app/core/totp.py`:** dependency-free RFC 6238 TOTP / RFC 4226 HOTP
+  (stdlib `hmac`/`hashlib`), base32 secrets compatible with standard
+  authenticator apps, ±1-step skew tolerance.
+- **Enrolment + enforcement:** `POST /api/auth/mfa/setup` (secret + otpauth
+  URI), `/mfa/activate`, `/mfa/disable` (all audited), `GET /mfa/status`. Login
+  now accepts an optional `mfa_code`; MFA-enabled accounts require it (distinct
+  `401 "MFA code required"` vs `"Invalid MFA code"`), checked after the password
+  so it never reveals account existence. Non-MFA logins are unchanged.
+- **Model/migration:** `users.mfa_enabled` + `users.mfa_secret`
+  (migration `a1b2c3d4e5f6`).
+- **Tests:** `server/tests/test_mfa.py`. **Docs:** `docs/mfa.md`.
+
 ### v1.4 — Compliance & executive reporting
 
 - **New `app/services/compliance.py` + `GET /api/admin/analytics/compliance-report`**

@@ -110,6 +110,21 @@ class BlocklistAdd(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+    # Optional TOTP code, required only for accounts with MFA enabled.
+    mfa_code: Optional[str] = None
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+
+
+class MfaCodeRequest(BaseModel):
+    code: str
+
+
+class MfaStatus(BaseModel):
+    enabled: bool
 
 
 class RefreshRequest(BaseModel):

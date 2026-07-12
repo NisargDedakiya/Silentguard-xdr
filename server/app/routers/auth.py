@@ -25,11 +25,46 @@ def _audit(db: Session, actor: str, action: str, target: str, org_id: str | None
 def login(body: schemas.LoginRequest, request: Request, db: Session = Depends(get_db)):
     try:
         user = auth_service.authenticate(db, body.email, body.password, _client_key(request))
+        auth_service.enforce_mfa(user, body.mfa_code)
         tokens = auth_service.issue_tokens(db, user)
     except auth_service.AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     _audit(db, f"user:{user.id}", "login", user.email, org_id=user.org_id)
     return tokens
+
+
+@router.get("/mfa/status", response_model=schemas.MfaStatus)
+def mfa_status(user: User = Depends(get_current_user)):
+    return schemas.MfaStatus(enabled=user.mfa_enabled)
+
+
+@router.post("/mfa/setup", response_model=schemas.MfaSetupResponse)
+def mfa_setup(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Begin TOTP enrolment: returns the secret + otpauth URI to load into an
+    authenticator. MFA is not enforced until confirmed via /mfa/activate."""
+    return auth_service.mfa_begin_setup(db, user)
+
+
+@router.post("/mfa/activate", response_model=schemas.MfaStatus)
+def mfa_activate(body: schemas.MfaCodeRequest, db: Session = Depends(get_db),
+                 user: User = Depends(get_current_user)):
+    try:
+        auth_service.mfa_activate(db, user, body.code)
+    except auth_service.AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    _audit(db, f"user:{user.id}", "mfa_enable", user.email, org_id=user.org_id)
+    return schemas.MfaStatus(enabled=True)
+
+
+@router.post("/mfa/disable", response_model=schemas.MfaStatus)
+def mfa_disable(body: schemas.MfaCodeRequest, db: Session = Depends(get_db),
+                user: User = Depends(get_current_user)):
+    try:
+        auth_service.mfa_disable(db, user, body.code)
+    except auth_service.AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    _audit(db, f"user:{user.id}", "mfa_disable", user.email, org_id=user.org_id)
+    return schemas.MfaStatus(enabled=False)
 
 
 @router.post("/refresh", response_model=schemas.TokenResponse)

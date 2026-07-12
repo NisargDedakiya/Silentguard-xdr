@@ -134,6 +134,10 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(32), default="read_only")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Multi-factor authentication (TOTP). The secret is set at setup time and
+    # only enforced at login once mfa_enabled is confirmed with a valid code.
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    mfa_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Account-lockout bookkeeping.
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

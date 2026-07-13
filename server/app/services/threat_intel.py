@@ -7,6 +7,7 @@ matched against the store by the detection engine.
 """
 import datetime
 import json
+import re
 
 from sqlalchemy.orm import Session
 
@@ -30,7 +31,13 @@ IOC_TECHNIQUE = {
 
 def normalize(ioc_type: str, value: str) -> str:
     value = value.strip()
-    if ioc_type in ("domain", "url", "sha256", "certificate"):
+    # A domain indicator is stored as its bare host so blocking a URL such as
+    # https://evil.example.com/x reduces to evil.example.com and subdomain
+    # matching works consistently.
+    if ioc_type == "domain":
+        from ..core.netmatch import extract_host
+        return extract_host(value) or value.lower()
+    if ioc_type in ("url", "sha256", "certificate"):
         return value.lower()
     return value
 
@@ -85,9 +92,21 @@ def _active(query, now: datetime.datetime):
 
 
 def lookup(db: Session, org_id: str | None, ioc_type: str, value: str) -> IOC | None:
-    """Return a matching, non-expired IOC for the org, or None."""
-    value = normalize(ioc_type, value)
+    """Return a matching, non-expired IOC for the org, or None.
+
+    For domain/URL indicators the match is **subdomain-aware**: a candidate host
+    matches a domain IOC if it equals it or is a subdomain of it (so a blocked
+    ``example.com`` catches ``evil.example.com``)."""
     now = utcnow()
+    if ioc_type in ("domain", "url"):
+        from ..core.netmatch import parent_domains
+        candidates = parent_domains(value)
+        if not candidates:
+            return None
+        q = db.query(IOC).filter(IOC.org_id == org_id, IOC.ioc_type == "domain",
+                                 IOC.value.in_(candidates))
+        return _active(q, now).first()
+    value = normalize(ioc_type, value)
     q = db.query(IOC).filter(IOC.org_id == org_id, IOC.ioc_type == ioc_type, IOC.value == value)
     row = _active(q, now).first()
     return row
@@ -102,6 +121,10 @@ def prune_expired(db: Session) -> int:
     return len(rows)
 
 
+# URLs embedded in a command line (e.g. `curl https://evil.example.com/x`).
+_URL_RE = re.compile(r"\bhttps?://[^\s'\"<>|)]+", re.IGNORECASE)
+
+
 def extract_indicators(details: dict | None) -> list[tuple[str, str]]:
     """Pull candidate indicators out of a telemetry event's details."""
     d = details or {}
@@ -113,6 +136,13 @@ def extract_indicators(details: dict | None) -> list[tuple[str, str]]:
     for key in ("ip", "remote_ip", "dest_ip", "gateway"):
         if d.get(key):
             out.append(("ip", str(d[key])))
+    # Also mine any command line / process text for embedded URLs so an outbound
+    # request to a blocked domain (or a subdomain of one) is caught.
+    for key in ("command_line", "cmdline", "process"):
+        text = d.get(key)
+        if text:
+            for url in _URL_RE.findall(str(text)):
+                out.append(("url", url))
     return out
 
 

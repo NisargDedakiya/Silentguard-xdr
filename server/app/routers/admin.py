@@ -239,6 +239,15 @@ async def add_blocklist(entry: schemas.BlocklistAdd, db: Session = Depends(get_d
     org_id = owning_org(principal)
     if entry.kind not in ("domain", "process", "port"):
         raise HTTPException(status_code=400, detail="kind must be domain, process or port")
+    value = entry.value.strip()
+    if entry.kind == "domain":
+        # Reduce a domain or URL to its bare host so blocking covers subdomains
+        # consistently (https://evil.example.com/x -> evil.example.com).
+        from ..core.netmatch import extract_host
+        value = extract_host(value) or value.lower()
+        if not value:
+            raise HTTPException(status_code=400, detail="invalid domain")
+    entry.value = value
     exists = db.query(BlocklistEntry).filter(
         BlocklistEntry.value == entry.value, BlocklistEntry.org_id == org_id
     ).first()

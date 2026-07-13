@@ -6,6 +6,23 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### Domain/URL blocking — subdomain-aware
+
+- **Blocking a domain now covers all of its subdomains.** New shared matcher
+  (`app/core/netmatch.py` + agent `net_match.py`): `host_matches_domain` is true
+  for the domain and any subdomain, with a strict dot boundary so `notexample.com`
+  / `example.com.evil.com` never match `example.com`.
+- **Server:** blocklist `domain` entries are normalized to a bare host (a blocked
+  URL → hostname); domain/URL IOC lookup is subdomain-aware; the detection engine
+  raises a `blocklist_domain` detection (high, T1071) when any observed domain/URL
+  — including URLs mined from command lines — falls under a blocked domain or a
+  subdomain of one. *Live-verified.*
+- **Agent:** the DNS sinkhole normalizes entries to bare hosts before writing the
+  hosts file. Note: hosts-file sinkholing is exact-hostname (documented); arbitrary
+  subdomain coverage is enforced by the server-side detection + response layer.
+- **Tests:** `server/tests/test_netmatch.py`, `agent/tests/test_net_match.py`.
+  **Docs:** `docs/domain-blocking.md`.
+
 ### Audit — bug fixes & verification
 
 - **Fix (security): TOTP fail-open on empty secret.** `totp.verify("", code)`

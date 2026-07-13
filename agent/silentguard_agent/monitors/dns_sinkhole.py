@@ -10,6 +10,7 @@ import platform
 from pathlib import Path
 
 from ..config import AgentConfig
+from ..net_match import extract_host
 from ..telemetry import TelemetryClient
 
 log = logging.getLogger("silentguard.dns_sinkhole")
@@ -31,8 +32,14 @@ class DnsSinkhole:
         self._applied: set[str] = set()
 
     def sync(self) -> None:
-        """Ensure the hosts file sinkholes exactly the current blocked set."""
-        domains = sorted(self.config.blocked_domains)
+        """Ensure the hosts file sinkholes exactly the current blocked set.
+
+        Each entry is reduced to its bare host (a URL such as
+        ``https://evil.example.com/x`` becomes ``evil.example.com``) so the
+        hosts-file line is always a valid hostname. Note: hosts-file sinkholing
+        is exact-hostname; subdomain coverage is enforced by the server-side
+        blocked-domain detection + response (see docs/domain-blocking.md)."""
+        domains = sorted({h for d in self.config.blocked_domains if (h := extract_host(d))})
         if set(domains) == self._applied:
             return
         if self.config.dry_run:

@@ -47,7 +47,46 @@ def evaluate_event(db: Session, device: Device, event: ThreatEvent) -> list[Dete
         detections.append(det)
 
     detections.extend(_evaluate_iocs(db, device, event))
+    detections.extend(_evaluate_blocklist_domains(db, device, event))
     detections.extend(_evaluate_sigma(db, device, event, ctx))
+    return detections
+
+
+def _evaluate_blocklist_domains(db: Session, device: Device, event: ThreatEvent) -> list[Detection]:
+    """Flag any observed request to a blocked domain **or a subdomain of one**.
+
+    A domain on the org blocklist (or a global entry) matches the domain itself
+    and every subdomain (``example.com`` catches ``evil.example.com``), including
+    URLs mined from a command line."""
+    from ..core.netmatch import host_matches_any
+    from ..models import BlocklistEntry
+
+    blocked = [
+        e.value for e in db.query(BlocklistEntry)
+        .filter(BlocklistEntry.kind == "domain")
+        .filter((BlocklistEntry.org_id == event.org_id) | (BlocklistEntry.org_id.is_(None)))
+        .all()
+    ]
+    if not blocked:
+        return []
+    detections: list[Detection] = []
+    seen: set[str] = set()
+    for ioc_type, value in threat_intel.extract_indicators(event.details):
+        if ioc_type not in ("domain", "url"):
+            continue
+        matched = host_matches_any(value, blocked)
+        if matched and matched not in seen:
+            seen.add(matched)
+            det = Detection(
+                org_id=event.org_id, device_id=device.id, event_id=event.id,
+                rule_id="blocklist_domain", name=f"Blocked domain contacted: {matched}",
+                severity="high", risk_score=60, technique_id="T1071",
+                technique_name="Application Layer Protocol", status="new",
+                details={"blocked_domain": matched, "observed": value,
+                         "responses": ["alert"]},
+            )
+            db.add(det)
+            detections.append(det)
     return detections
 
 

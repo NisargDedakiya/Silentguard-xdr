@@ -29,3 +29,15 @@ def test_sinkhole_normalizes_url_entries_to_hosts(config, telemetry, tmp_path):
     assert "0.0.0.0 bad.test" in written
     assert "0.0.0.0 example.com" in written
     assert "https://" not in written
+    # An apex domain also sinkholes its common subdomains (www/m), so blocking
+    # example.com covers www.example.com — the browser's real target.
+    assert "0.0.0.0 www.example.com" in written
+    assert "0.0.0.0 m.example.com" in written
+
+
+def test_expand_hosts_covers_www_of_apex():
+    from silentguard_agent.monitors.dns_sinkhole import expand_hosts
+    out = expand_hosts({"youtube.com"})
+    assert {"youtube.com", "www.youtube.com", "m.youtube.com"} <= out
+    # A subdomain entry is not further expanded.
+    assert expand_hosts({"api.example.com"}) == {"api.example.com"}

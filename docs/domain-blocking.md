@@ -42,13 +42,33 @@ The agent pins blocked hosts to `0.0.0.0` in the OS hosts file, so the endpoint
 cannot resolve or connect to them. Each entry is normalized to a bare host first
 (a blocked URL becomes a hostname). 
 
-**Limitation:** the OS hosts file is exact-hostname and cannot wildcard, so
-sinkholing `example.com` blocks `example.com` but not arbitrary subdomains at the
-resolver. Subdomain coverage at the endpoint is therefore provided by layer 1
-(detect the subdomain request and respond), and, when specific subdomains are
-known, by adding them to the blocklist (they are pushed to agents and sinkholed
-too). True wildcard egress blocking would require a local DNS proxy, which is out
-of scope for the hosts-file approach.
+When an **apex** domain is blocked (e.g. `youtube.com`), the sinkhole also writes
+its most common subdomains — `www.`, `m.`, `mobile.` — because browsers usually
+load `www.youtube.com` when you type `youtube.com`. This covers the everyday "I
+blocked the site but it still opens" case.
+
+**Limitation:** the OS hosts file is exact-hostname and cannot wildcard, so it
+covers the apex + the common subdomains above, not *arbitrary* subdomains at the
+resolver. Broader subdomain coverage at the endpoint is provided by layer 1
+(detect the subdomain request and respond), and by adding specific subdomains to
+the blocklist. True wildcard egress blocking would require a local DNS proxy.
+
+### Requirements for hosts-file blocking to actually take effect
+
+If a blocked site still opens, check these — in order:
+
+1. **The agent must run elevated** (Administrator on Windows / root on Linux) to
+   edit the hosts file. Unelevated, it logs "must run elevated…" and does nothing.
+2. **The agent must not be in dry-run** (`SG_DRY_RUN=1` only logs "would
+   sinkhole" and never writes).
+3. **Browser Secure DNS / DNS-over-HTTPS (DoH) can bypass the hosts file.** In
+   Chrome/Edge: Settings → Privacy & security → Security → turn **off** "Use
+   secure DNS". Otherwise the browser resolves via a DoH server and ignores the
+   hosts file entirely.
+4. **Flush caches after a change:** `ipconfig /flushdns` (Windows) and restart
+   the browser (browsers keep their own DNS cache and warm connections).
+
+Layer 1 (server detection) still records the attempt regardless of these.
 
 ## Matching definition (both layers)
 

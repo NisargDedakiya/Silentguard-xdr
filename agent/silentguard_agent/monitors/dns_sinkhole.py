@@ -18,11 +18,30 @@ log = logging.getLogger("silentguard.dns_sinkhole")
 MARK_BEGIN = "# >>> SilentGuard XDR sinkhole >>>"
 MARK_END = "# <<< SilentGuard XDR sinkhole <<<"
 
+# Hosts files cannot wildcard, and browsers usually load the ``www``/``m`` host
+# of a site (you type youtube.com, the browser goes to www.youtube.com). So when
+# an apex domain is blocked we also sinkhole its most common subdomains, which
+# covers the everyday "I blocked the site but it still opens" case.
+COMMON_SUBDOMAINS = ("www", "m", "mobile")
+
 
 def hosts_path() -> Path:
     if platform.system() == "Windows":
         return Path(r"C:\Windows\System32\drivers\etc\hosts")
     return Path("/etc/hosts")
+
+
+def expand_hosts(hosts) -> set[str]:
+    """Add common subdomain variants for each blocked apex domain."""
+    out: set[str] = set()
+    for h in hosts:
+        if not h:
+            continue
+        out.add(h)
+        if h.count(".") == 1:  # a registrable apex like youtube.com
+            for prefix in COMMON_SUBDOMAINS:
+                out.add(f"{prefix}.{h}")
+    return out
 
 
 class DnsSinkhole:
@@ -37,9 +56,11 @@ class DnsSinkhole:
         Each entry is reduced to its bare host (a URL such as
         ``https://evil.example.com/x`` becomes ``evil.example.com``) so the
         hosts-file line is always a valid hostname. Note: hosts-file sinkholing
-        is exact-hostname; subdomain coverage is enforced by the server-side
+        is exact-hostname, so we also sinkhole common subdomains (www/m) of each
+        blocked apex; broader subdomain coverage is enforced by the server-side
         blocked-domain detection + response (see docs/domain-blocking.md)."""
-        domains = sorted({h for d in self.config.blocked_domains if (h := extract_host(d))})
+        configured = {h for d in self.config.blocked_domains if (h := extract_host(d))}
+        domains = sorted(expand_hosts(configured))
         if set(domains) == self._applied:
             return
         if self.config.dry_run:
@@ -50,7 +71,8 @@ class DnsSinkhole:
         try:
             content = path.read_text()
         except OSError as exc:
-            log.warning("Cannot read hosts file (%s); need admin/root privileges", exc)
+            log.warning("Cannot read hosts file (%s) — the agent must run "
+                        "elevated (Administrator/root) to enforce domain blocks", exc)
             return
 
         # Strip any previous SilentGuard block, then append the fresh one.
@@ -63,17 +85,20 @@ class DnsSinkhole:
         try:
             path.write_text(new_content)
         except OSError as exc:
-            log.warning("Cannot write hosts file (%s); need admin/root privileges", exc)
+            log.warning("Cannot write hosts file (%s) — the agent must run "
+                        "elevated (Administrator/root) to enforce domain blocks", exc)
             return
 
         newly_blocked = set(domains) - self._applied
         self._applied = set(domains)
-        for d in sorted(newly_blocked):
+        # Announce only the domains the operator actually configured — the
+        # auto-added www/m variants are enforcement detail, not separate events.
+        for d in sorted(newly_blocked & configured):
             self.telemetry.emit(
                 source="dns_sinkhole",
                 action="blocked",
                 severity="warning",
-                summary=f"Domain '{d}' sinkholed to 0.0.0.0",
+                summary=f"Domain '{d}' (and common subdomains) sinkholed to 0.0.0.0",
                 details={"domain": d},
             )
-        log.info("Sinkhole updated: %d domains active", len(domains))
+        log.info("Sinkhole updated: %d host entries active", len(domains))

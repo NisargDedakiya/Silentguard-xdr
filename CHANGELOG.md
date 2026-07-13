@@ -6,6 +6,18 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.4 — Agent tamper protection
+
+- **New `agent/silentguard_agent/tamper.py`:** HMAC-integrity protects the agent
+  state file (device id + API key). `save_state` signs it; `ensure_enrolled`
+  verifies before trusting credentials — a tampered file has its credentials
+  discarded (safe re-enrol) and reports a `tamper` event. Integrity key from
+  `SG_TAMPER_KEY` (falls back to a machine-derived key).
+- **Server:** new built-in `tamper_detected` rule → critical detection
+  (T1562.001, Impair Defenses).
+- **Tests:** `agent/tests/test_tamper.py` + a server ingestion test.
+  **Docs:** `docs/tamper-protection.md`.
+
 ### v1.3 — Registry autorun monitor
 
 - **New `agent/silentguard_agent/monitors/registry_monitor.py`:** watches the

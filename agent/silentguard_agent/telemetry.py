@@ -13,9 +13,10 @@ from collections import deque
 
 import requests
 
-from . import __version__
+from . import __version__, tamper
 from .cert_pinning import build_session
-from .config import AgentConfig, load_queue, load_state, save_queue, save_state
+from .config import (AgentConfig, effective_tamper_key, load_queue, load_state,
+                     save_queue, save_state)
 
 log = logging.getLogger("silentguard.telemetry")
 
@@ -44,9 +45,17 @@ class TelemetryClient:
     # -- enrollment -------------------------------------------------------
     def ensure_enrolled(self) -> None:
         state = load_state()
-        if state.get("device_id") and state.get("api_key"):
-            self.device_id, self.api_key = state["device_id"], state["api_key"]
-            return
+        if tamper.has_credentials(state):
+            if tamper.is_authentic(state, effective_tamper_key()):
+                self.device_id, self.api_key = state["device_id"], state["api_key"]
+                return
+            # The state file was modified out from under us: refuse the stored
+            # credentials and re-enrol, reporting the tamper attempt.
+            log.warning("State file failed integrity check; discarding credentials")
+            self.emit("agent", "tamper",
+                      "Agent state file integrity check failed; re-enrolling",
+                      severity="critical",
+                      details={"device_id": state.get("device_id", "")})
         resp = self.session.post(
             f"{self.config.server_url}/api/agent/enroll",
             json={

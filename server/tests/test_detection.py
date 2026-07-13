@@ -156,6 +156,17 @@ def test_yara_match_telemetry_creates_detection(client, enrolled_device):
     assert hits[0]["technique_id"] == "T1105"
 
 
+def test_agent_tamper_creates_detection(client, enrolled_device):
+    """An agent tamper report becomes a critical defense-evasion detection."""
+    _emit(client, enrolled_device["headers"], source="agent", action="tamper",
+          severity="critical", summary="Agent state file integrity check failed",
+          details={"device_id": "dev-1"})
+    dets = client.get("/api/admin/detections", headers=ADMIN_HEADERS).json()
+    hits = [d for d in dets if d["rule_id"] == "tamper_detected"]
+    assert len(hits) == 1
+    assert hits[0]["technique_id"] == "T1562.001"
+
+
 def test_registry_autorun_creates_persistence_detection(client, enrolled_device):
     """A registry autorun event from the agent fires the persistence rule."""
     _emit(client, enrolled_device["headers"], source="registry_monitor",

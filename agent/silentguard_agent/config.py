@@ -85,6 +85,8 @@ class AgentConfig:
     # Registry autorun monitor (v1.3): Windows-only; watches Run/RunOnce keys.
     # Active only on Windows; a no-op elsewhere regardless of this flag.
     registry_enabled: bool = os.environ.get("SG_REGISTRY_ENABLED", "1") != "0"
+    # State-file tamper protection (v1.4): integrity key for the state HMAC.
+    tamper_key: str = os.environ.get("SG_TAMPER_KEY", "")
 
     def __post_init__(self) -> None:
         rep = load_reputation()
@@ -101,6 +103,15 @@ def load_reputation() -> dict:
         return {}
 
 
+def effective_tamper_key() -> str:
+    """Integrity key for the state HMAC. Prefer an out-of-band secret; else
+    derive from stable machine attributes (weaker — set SG_TAMPER_KEY)."""
+    key = os.environ.get("SG_TAMPER_KEY", "")
+    if key:
+        return key
+    return f"sg-tamper::{platform.node()}::{platform.system()}"
+
+
 def load_state() -> dict:
     try:
         return json.loads(STATE_FILE.read_text())
@@ -109,8 +120,10 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
+    from . import tamper
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state))
+    signed = tamper.sign(state, effective_tamper_key())
+    STATE_FILE.write_text(json.dumps(signed))
     try:
         os.chmod(STATE_FILE, 0o600)
     except OSError:

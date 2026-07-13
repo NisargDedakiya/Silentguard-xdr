@@ -96,6 +96,25 @@ def remote_update(cmd, telemetry, config, report):
                            details={"version": target, "reason": reason})
             report(action_id, "failed", error=reason, version=target)
             return
+        # Anti-rollback: refuse a signed downgrade below the accepted floor
+        # unless the (signed) manifest explicitly allows it (v1.4).
+        from . import update_verifier as uv
+        from .config import get_update_floor, set_update_floor
+        floor = get_update_floor()
+        allow_rollback = str(cmd.get("allow_rollback", "")).lower() in ("1", "true", "yes")
+        if (uv.is_numeric_version(target) and floor
+                and uv.is_rollback(target, floor) and not allow_rollback):
+            telemetry.emit("response", "update_rejected",
+                           f"Agent update to {target} rejected: rollback below {floor} blocked",
+                           severity="warning",
+                           details={"version": target, "floor": floor,
+                                    "reason": "rollback_blocked"})
+            report(action_id, "failed", error="rollback_blocked",
+                   version=target, floor=floor)
+            return
+        # Advance the floor when accepting a newer version.
+        if uv.is_numeric_version(target) and (not floor or uv.version_gt(target, floor)):
+            set_update_floor(target)
         telemetry.emit("response", "update_verified",
                        f"Agent update to {target} verified and acknowledged",
                        severity="info",

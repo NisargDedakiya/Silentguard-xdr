@@ -4,8 +4,17 @@ import hmac
 
 import pytest
 
+from silentguard_agent import config as cfg
 from silentguard_agent import response_handlers as handlers
 from silentguard_agent.update_verifier import canonical_manifest, verify_update
+
+
+@pytest.fixture(autouse=True)
+def _isolate_state(tmp_path, monkeypatch):
+    """Keep the anti-rollback floor writes off the real filesystem."""
+    monkeypatch.setattr(cfg, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(cfg, "STATE_FILE", tmp_path / "agent_state.json")
+    monkeypatch.delenv("SG_TAMPER_KEY", raising=False)
 
 
 class _Tel:

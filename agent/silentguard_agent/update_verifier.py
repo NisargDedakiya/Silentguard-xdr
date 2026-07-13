@@ -27,14 +27,51 @@ import logging
 log = logging.getLogger("silentguard.update")
 
 # Fields covered by the signature. Anything outside this set (action_id, etc.)
-# is transport metadata and is deliberately excluded.
-_SIGNED_FIELDS = ("version", "url", "sha256")
+# is transport metadata and is deliberately excluded. ``allow_rollback`` is
+# signed so an attacker cannot replay an old signed manifest with a forged
+# rollback override (v1.4 anti-rollback).
+_SIGNED_FIELDS = ("version", "url", "sha256", "allow_rollback")
 
 
 def canonical_manifest(cmd: dict) -> bytes:
     """Deterministic byte representation of the signable manifest fields."""
     payload = {k: str(cmd.get(k, "")) for k in _SIGNED_FIELDS}
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+
+
+# -- version comparison / anti-rollback -----------------------------------
+def parse_version(value: str) -> tuple[int, ...]:
+    """Best-effort numeric version tuple, e.g. ``1.2.0-rc1`` -> ``(1, 2, 0)``."""
+    parts = []
+    for chunk in str(value).split("."):
+        digits = ""
+        for ch in chunk:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts) if parts else (0,)
+
+
+def _padded(a: tuple, b: tuple) -> tuple[tuple, tuple]:
+    n = max(len(a), len(b))
+    return a + (0,) * (n - len(a)), b + (0,) * (n - len(b))
+
+
+def is_numeric_version(value: str) -> bool:
+    return any(ch.isdigit() for ch in str(value))
+
+
+def version_gt(target: str, floor: str) -> bool:
+    a, b = _padded(parse_version(target), parse_version(floor))
+    return a > b
+
+
+def is_rollback(target: str, floor: str) -> bool:
+    """True when ``target`` is an older version than the accepted ``floor``."""
+    a, b = _padded(parse_version(target), parse_version(floor))
+    return a < b
 
 
 def _decode_bytes(value: str) -> bytes:

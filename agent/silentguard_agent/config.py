@@ -130,6 +130,18 @@ def save_state(state: dict) -> None:
         pass
 
 
+def get_update_floor() -> str:
+    """Highest update version accepted so far (anti-rollback floor)."""
+    return str(load_state().get("update_floor", ""))
+
+
+def set_update_floor(version: str) -> None:
+    """Persist a new anti-rollback floor into the (tamper-protected) state."""
+    state = load_state()
+    state["update_floor"] = str(version)
+    save_state(state)  # re-signs the state file
+
+
 def load_queue() -> list:
     """Load the persisted offline telemetry spool (empty on any error)."""
     try:

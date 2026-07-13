@@ -6,6 +6,19 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.4 — Secure update rollback protection
+
+- **Anti-rollback for signed updates:** the agent keeps a monotonic version
+  floor (persisted in the tamper-protected state) and refuses a signed
+  *downgrade* below it — defeating replay of an old, genuinely-signed manifest
+  to force a vulnerable version. `update_verifier` gains version parsing/compare;
+  `remote_update` blocks a rollback (`rollback_blocked`) unless the manifest
+  carries `allow_rollback`.
+- **`allow_rollback` is now a signed field**, so a forged rollback override on an
+  old manifest invalidates the signature — only the signer can authorize a
+  downgrade. **Tests:** `agent/tests/test_update_rollback.py`.
+  **Docs:** `docs/update-rollback.md`.
+
 ### v1.4 — Agent tamper protection
 
 - **New `agent/silentguard_agent/tamper.py`:** HMAC-integrity protects the agent

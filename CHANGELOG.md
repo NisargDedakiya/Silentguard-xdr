@@ -6,6 +6,17 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### Quality — end-to-end attack simulation
+
+- **New `server/tests/test_attack_simulation.py`:** an integration test that
+  drives a realistic 9-stage ATT&CK kill chain (execution → LOLBin → credential
+  dump → persistence → C2 → malware-on-disk → evasion → ransomware → contained)
+  through the whole pipeline and asserts every stage is detected — built-in
+  rules, the custom-monitor server rules (registry/YARA/Suricata/tamper), and a
+  SOC-supplied Sigma rule together. Also verifies MITRE tactic breadth and the
+  triage→compliance loop (critical backlog control fail→pass on resolution).
+  **Docs:** `docs/attack-simulation.md`.
+
 ### v1.4 — SSO via OpenID Connect
 
 - **New `app/services/sso.py` + `GET /api/auth/sso/login` and `/sso/callback`:**

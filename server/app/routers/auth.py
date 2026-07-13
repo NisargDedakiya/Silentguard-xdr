@@ -7,7 +7,7 @@ from ..auth import get_current_user
 from ..core.config import settings
 from ..database import get_db
 from ..models import AuditLogEntry, User
-from ..services import auth_service
+from ..services import auth_service, sso
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -30,6 +30,30 @@ def login(body: schemas.LoginRequest, request: Request, db: Session = Depends(ge
     except auth_service.AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     _audit(db, f"user:{user.id}", "login", user.email, org_id=user.org_id)
+    return tokens
+
+
+@router.get("/sso/login", response_model=schemas.SsoLoginResponse)
+def sso_login():
+    """Begin OIDC SSO: returns the IdP authorization URL to redirect the user to."""
+    if not sso.is_available():
+        raise HTTPException(status_code=503, detail="SSO is not configured")
+    try:
+        return schemas.SsoLoginResponse(authorization_url=sso.begin_login())
+    except sso.SSOError as exc:
+        raise HTTPException(status_code=502, detail=f"SSO error: {exc}")
+
+
+@router.get("/sso/callback", response_model=schemas.TokenResponse)
+def sso_callback(code: str, state: str, db: Session = Depends(get_db)):
+    """OIDC redirect target: exchange the code and issue SilentGuard tokens."""
+    if not sso.is_available():
+        raise HTTPException(status_code=503, detail="SSO is not configured")
+    try:
+        tokens = sso.login(db, code, state)
+    except sso.SSOError as exc:
+        raise HTTPException(status_code=401, detail=f"SSO login failed: {exc}")
+    _audit(db, "sso", "sso_login", code[:8])
     return tokens
 
 

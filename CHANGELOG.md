@@ -6,6 +6,20 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### v1.4 — SSO via OpenID Connect
+
+- **New `app/services/sso.py` + `GET /api/auth/sso/login` and `/sso/callback`:**
+  OIDC authorization-code SSO so an enterprise IdP (Okta, Entra ID, Google,
+  Keycloak, …) fronts authentication. Signed-state CSRF/nonce binding (no session
+  store), token-endpoint code exchange, `id_token` verification against the IdP
+  JWKS (RS256/ES256) with issuer/audience/nonce checks, then provision-or-match a
+  local user (default role `SG_OIDC_DEFAULT_ROLE`, optional domain allowlist) and
+  issue standard JWTs. Config-gated by `settings.oidc_available`; endpoints 503
+  when unconfigured.
+- **Deps:** `cryptography>=41` (RS256/ES256 verification). The HTTP boundary uses
+  `urllib` (mockable). **Tests:** `server/tests/test_sso.py` (network + token
+  verification mocked). **Docs:** `docs/sso-oidc.md`.
+
 ### v1.4 — Secure update rollback protection
 
 - **Anti-rollback for signed updates:** the agent keeps a monotonic version

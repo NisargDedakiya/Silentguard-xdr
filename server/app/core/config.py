@@ -80,6 +80,22 @@ class Settings(BaseSettings):
     bootstrap_admin_email: str = Field(default="", alias="SG_BOOTSTRAP_ADMIN_EMAIL")
     bootstrap_admin_password: str = Field(default="", alias="SG_BOOTSTRAP_ADMIN_PASSWORD")
 
+    # -- SSO / OIDC (v1.4; optional, additive) ----------------------------
+    oidc_enabled: bool = Field(default=False, alias="SG_OIDC_ENABLED")
+    oidc_issuer: str = Field(default="", alias="SG_OIDC_ISSUER")  # discovery base URL
+    oidc_client_id: str = Field(default="", alias="SG_OIDC_CLIENT_ID")
+    oidc_client_secret: str = Field(default="", alias="SG_OIDC_CLIENT_SECRET")
+    oidc_redirect_uri: str = Field(default="", alias="SG_OIDC_REDIRECT_URI")
+    oidc_scopes: str = Field(default="openid email profile", alias="SG_OIDC_SCOPES")
+    # Role assigned to a first-seen SSO user, and an optional email-domain allowlist.
+    oidc_default_role: str = Field(default="read_only", alias="SG_OIDC_DEFAULT_ROLE")
+    oidc_allowed_domain: str = Field(default="", alias="SG_OIDC_ALLOWED_DOMAIN")
+
+    @property
+    def oidc_available(self) -> bool:
+        return bool(self.oidc_enabled and self.oidc_issuer and self.oidc_client_id
+                    and self.oidc_client_secret and self.oidc_redirect_uri)
+
     # -- AI Security Assistant (Stage 6; optional, additive) --------------
     # Claude-powered detection triage: summary, ATT&CK explanation, remediation.
     # Fully off by default; the platform runs identically without it. Enable it

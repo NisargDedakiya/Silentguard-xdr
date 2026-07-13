@@ -127,6 +127,10 @@ class MfaStatus(BaseModel):
     enabled: bool
 
 
+class SsoLoginResponse(BaseModel):
+    authorization_url: str
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 

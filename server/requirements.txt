@@ -5,6 +5,7 @@ alembic>=1.13
 pydantic>=2.6
 pydantic-settings>=2.0
 pyjwt>=2.8
+cryptography>=41  # RS256/ES256 OIDC id_token verification (v1.4 SSO)
 python-multipart>=0.0.9
 pyyaml>=6.0  # Sigma rule parsing (v1.3 detection engine)
 anthropic>=0.40  # AI Security Assistant (Stage 6); only used when SG_AI_ENABLED

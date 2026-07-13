@@ -9,3 +9,8 @@ node_modules/
 .env
 .env.local
 .silentguard/
+
+# Coverage artifacts
+.coverage
+.coverage.*
+htmlcov/

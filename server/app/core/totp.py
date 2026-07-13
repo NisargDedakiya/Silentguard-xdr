@@ -45,8 +45,9 @@ def totp(secret_b32: str, at: float | None = None,
 def verify(secret_b32: str, code: str, at: float | None = None,
            period: int = PERIOD, digits: int = DIGITS, window: int = 1) -> bool:
     """Constant-time verify ``code``, tolerating +/- ``window`` steps of clock
-    skew (default one 30s step either side)."""
-    if not code or not str(code).strip().isdigit():
+    skew (default one 30s step either side). Fails closed on an empty secret so a
+    missing/null secret can never be satisfied by a computed code."""
+    if not secret_b32 or not code or not str(code).strip().isdigit():
         return False
     code = str(code).strip()
     at = time.time() if at is None else at

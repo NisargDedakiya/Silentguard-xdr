@@ -40,6 +40,13 @@ def test_totp_rejects_bad_input():
     assert totp.verify(secret, totp.totp(secret, at=0), at=0)
 
 
+def test_verify_fails_closed_on_empty_secret():
+    # A null/empty secret must never be satisfiable, even by an HMAC computed
+    # over an empty key (defense-in-depth against a bad MFA-enabled state).
+    assert totp.verify("", totp.totp("", at=0), at=0) is False
+    assert totp.verify("", "000000") is False
+
+
 def test_provisioning_uri_shape():
     uri = totp.provisioning_uri("ABCDEF", "user@x.com")
     assert uri.startswith("otpauth://totp/")

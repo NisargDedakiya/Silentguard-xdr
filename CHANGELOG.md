@@ -6,6 +6,19 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### Audit — bug fixes & verification
+
+- **Fix (security): TOTP fail-open on empty secret.** `totp.verify("", code)`
+  computed an HMAC over an empty key and could return a matchable code — a
+  potential MFA bypass had a user ever reached `mfa_enabled=True` with a null
+  secret. `verify()` now fails closed on an empty secret (regression test added).
+- **Fix: stop tracking `server/.coverage`** (test artifact) and add coverage
+  artifacts to `.gitignore`.
+- **Verification:** full live audit — server booted, real agent run end to end,
+  every feature exercised over HTTP (auth/MFA/SSO/RBAC/detection/analytics/
+  compliance/SSRF/secure-headers), migrations drift-free, all 71 modules import
+  clean, server 245 tests @ 91% coverage, agent 102 tests. See `docs/AUDIT-v1.md`.
+
 ### Quality — end-to-end attack simulation
 
 - **New `server/tests/test_attack_simulation.py`:** an integration test that

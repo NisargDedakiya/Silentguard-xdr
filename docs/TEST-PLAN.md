@@ -2,10 +2,16 @@
 
 Two layers of testing:
 
-1. **Automated** — the existing suites (server **254**, agent **105**). Run them:
+1. **Automated** — the full suites (server **273**, agent **119**). Run them:
    ```bash
    cd server && pip install -r requirements.txt && pytest -q --cov=app   # ~91% coverage
    cd agent  && pip install -r requirements.txt && pytest -q
+   ```
+   **Feature acceptance suites** — one runnable walk-through of *every* feature,
+   the executable counterpart of this plan (run these to demo all features):
+   ```bash
+   cd server && pytest tests/test_acceptance.py -v   # 19 checks across the API surface
+   cd agent  && pytest tests/test_acceptance.py -v   # 10 checks across every monitor
    ```
 2. **Manual / end‑to‑end** — the cases below, to validate live behavior an operator
    cares about. Each case: **precondition → steps → expected result**, plus the

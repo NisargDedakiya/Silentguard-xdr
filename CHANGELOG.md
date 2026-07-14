@@ -6,6 +6,17 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### Testing — feature acceptance suites
+
+- **New `server/tests/test_acceptance.py` (19 checks)** and
+  **`agent/tests/test_acceptance.py` (10 checks)**: one runnable walk-through of
+  every feature — the executable counterpart of `docs/TEST-PLAN.md`. Server side
+  covers enrollment, auth/RBAC/MFA/SSO, all detection rule families, IOC/Sigma,
+  subdomain-aware blocklist, analytics/compliance/AI/SSRF, and licensing; agent
+  side covers each monitor and enforcement path (process, domain matching + www
+  expansion, YARA, Suricata, registry, signed-update/rollback, tamper, pinning,
+  offline queue, enforcement capability). Totals: server **273**, agent **119**.
+
 ### Deployment — elevated service installers (enforcement on by setup)
 
 - **New `agent/install/` installers** so setup itself enables enforcement — no

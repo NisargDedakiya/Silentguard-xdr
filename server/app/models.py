@@ -26,7 +26,9 @@ class Organization(Base):
     name: Mapped[str] = mapped_column(String(255))
     slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    # Licensing placeholders (M16): tier + device cap (0 = unlimited).
+    # Subscription plan drives feature entitlements: individual | team | enterprise.
+    plan: Mapped[str] = mapped_column(String(16), default="individual")
+    # Licensing (M16): tier + device cap (0 = use the plan default / unlimited).
     license_tier: Mapped[str] = mapped_column(String(32), default="community")
     max_devices: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

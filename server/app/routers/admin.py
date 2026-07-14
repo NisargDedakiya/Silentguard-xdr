@@ -274,6 +274,14 @@ def delete_blocklist(entry_id: int, db: Session = Depends(get_db),
     return {"deleted": entry_id}
 
 
+@router.get("/entitlements")
+def get_entitlements(db: Session = Depends(get_db), principal: Principal = ReadFleet):
+    """The caller org's plan and feature entitlements — clients use this to show
+    the right UI and which features are unlocked (Individual/Team/Enterprise)."""
+    from ..core import plans
+    return plans.entitlements_for(db, owning_org(principal))
+
+
 @router.get("/audit", response_model=list[schemas.AuditOut])
 def list_audit(limit: int = 100, db: Session = Depends(get_db), principal: Principal = ReadAudit):
     """Read-only audit trail of admin actions, newest first."""

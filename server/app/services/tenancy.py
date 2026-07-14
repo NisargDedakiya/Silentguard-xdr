@@ -21,7 +21,10 @@ def ensure_default_org(db: Session) -> Organization:
     """Create the well-known default organization if it does not exist. Idempotent."""
     org = db.get(Organization, DEFAULT_ORG_ID)
     if org is None:
-        org = Organization(id=DEFAULT_ORG_ID, name=DEFAULT_ORG_NAME, slug=DEFAULT_ORG_SLUG)
+        # The default tenant is enterprise-tier so out-of-the-box everything is
+        # unlocked; additional orgs choose their own plan.
+        org = Organization(id=DEFAULT_ORG_ID, name=DEFAULT_ORG_NAME,
+                           slug=DEFAULT_ORG_SLUG, plan="enterprise")
         db.add(org)
         db.commit()
         log.info("created default organization", extra={"org_id": DEFAULT_ORG_ID})

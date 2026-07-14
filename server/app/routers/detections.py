@@ -92,6 +92,10 @@ def explain(detection_id: int, db: Session = Depends(get_db),
     summary, MITRE ATT&CK explanation, and prioritized remediation. Read-only
     (no state change); returns 503 when the assistant is not configured."""
     det = _get_scoped(db, detection_id, principal)
+    from ..core import plans
+    if not plans.feature_enabled(db, det.org_id, "ai_assistant"):
+        raise HTTPException(status_code=402,
+                            detail="The AI assistant is not included in this plan")
     if not ai_assistant.is_available():
         raise HTTPException(status_code=503, detail="AI Security Assistant is not configured")
     event = db.get(ThreatEvent, det.event_id) if det.event_id else None

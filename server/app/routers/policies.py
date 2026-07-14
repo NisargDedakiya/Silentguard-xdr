@@ -26,6 +26,13 @@ def list_groups(db: Session = Depends(get_db), principal: Principal = ReadFleet)
 def create_group(body: schemas.DeviceGroupCreate, db: Session = Depends(get_db),
                  principal: Principal = ManagePolicy):
     org_id = owning_org(principal)
+    from ..core import plans
+    if not plans.feature_enabled(db, org_id, "device_groups"):
+        raise HTTPException(status_code=402,
+                            detail="Device groups require the Team or Enterprise plan")
+    current = db.query(DeviceGroup).filter(DeviceGroup.org_id == org_id).count()
+    if not plans.within_limit(db, org_id, "max_groups", current):
+        raise HTTPException(status_code=402, detail="Group limit reached for this plan")
     if db.query(DeviceGroup).filter(DeviceGroup.org_id == org_id,
                                     DeviceGroup.name == body.name).first():
         raise HTTPException(status_code=409, detail="Group already exists")

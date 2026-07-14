@@ -50,14 +50,15 @@ router = APIRouter(prefix="/api/agent", tags=["agent"])
 async def enroll(req: schemas.EnrollRequest, db: Session = Depends(get_db)):
     if not secrets.compare_digest(req.enroll_token, ENROLL_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid enrollment token")
-    # Licensing placeholder: enforce the org device cap (0 = unlimited).
-    from ..models import Organization
-    org = db.get(Organization, DEFAULT_ORG_ID)
-    if org is not None and org.max_devices > 0:
+    # Enforce the plan's device cap (0 = unlimited); an org-level max_devices
+    # override wins over the plan default (see core/plans.py).
+    from ..core import plans
+    limit = plans.entitlements_for(db, DEFAULT_ORG_ID)["max_devices"]
+    if limit > 0:
         current = db.query(Device).filter(Device.org_id == DEFAULT_ORG_ID).count()
-        if current >= org.max_devices:
+        if current >= limit:
             raise HTTPException(status_code=402,
-                                detail="Device license limit reached for this organization")
+                                detail="Device limit reached for this plan")
     device = Device(
         id=str(uuid.uuid4()),
         org_id=DEFAULT_ORG_ID,

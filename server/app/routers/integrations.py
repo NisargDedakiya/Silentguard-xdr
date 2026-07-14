@@ -47,8 +47,13 @@ def create_integration(body: schemas.IntegrationCreate, db: Session = Depends(ge
                        principal: Principal = ManageIntegrations):
     if body.kind not in VALID_KINDS:
         raise HTTPException(status_code=400, detail=f"kind must be one of {sorted(VALID_KINDS)}")
+    org_id = owning_org(principal)
+    from ..core import plans
+    if not plans.feature_enabled(db, org_id, "integrations"):
+        raise HTTPException(status_code=402,
+                            detail="Integrations require the Team or Enterprise plan")
     _validate_destination(body.kind, body.config)
-    row = Integration(org_id=owning_org(principal), name=body.name, kind=body.kind,
+    row = Integration(org_id=org_id, name=body.name, kind=body.kind,
                       config=body.config, min_severity=body.min_severity, enabled=body.enabled)
     db.add(row)
     db.commit()

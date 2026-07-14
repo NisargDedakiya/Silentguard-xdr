@@ -26,6 +26,12 @@ def list_users(db: Session = Depends(get_db), principal: Principal = ManageUsers
 def create_user(body: schemas.UserCreate, db: Session = Depends(get_db),
                 principal: Principal = ManageUsers):
     org_id = owning_org(principal)
+    from ..core import plans
+    from ..models import User
+    current = db.query(User).filter(User.org_id == org_id).count()
+    if not plans.within_limit(db, org_id, "max_users", current):
+        raise HTTPException(status_code=402,
+                            detail="User limit reached for this plan; upgrade to add more members")
     try:
         user = auth_service.create_user(db, body.email, body.password, body.role, org_id=org_id)
     except auth_service.AuthError as exc:

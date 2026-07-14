@@ -42,6 +42,11 @@ def get_compliance_report(days: int = 30, db: Session = Depends(get_db),
     """Executive/compliance posture report (v1.4): fleet health, detection
     backlog, threat-intel coverage, and pass/warn/fail control checks with a
     headline score. Requires the audit-read permission."""
+    from ..core import plans
+    from ..services.tenancy import owning_org
+    if not plans.feature_enabled(db, owning_org(principal), "compliance_reports"):
+        raise HTTPException(status_code=402,
+                            detail="Compliance reporting requires the Team or Enterprise plan")
     return compliance.build_compliance_report(db, principal, days)
 
 

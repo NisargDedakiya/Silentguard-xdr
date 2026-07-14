@@ -22,6 +22,7 @@ class Permission(str, Enum):
     MANAGE_INTEGRATIONS = "manage:integrations"  # SIEM/SOAR/webhook destinations
     MANAGE_POLICY = "manage:policy"        # device groups + policies
     MANAGE_USERS = "manage:users"          # create / list / disable users
+    MANAGE_ORGS = "manage:orgs"            # create / update organizations & plans
 
 
 _ALL = frozenset(Permission)

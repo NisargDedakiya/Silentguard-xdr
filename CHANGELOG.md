@@ -6,6 +6,23 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### Enterprise / Groups / Individuals — org management, members, home mode
+
+- **Organization management (super-admin):** new `MANAGE_ORGS` permission +
+  `orgs` router — `GET/POST /api/admin/organizations`, `GET/PATCH .../{id}` to
+  create tenants, set their plan, adjust caps, and deactivate them (audited,
+  with device/user counts).
+- **Member management:** `PATCH /api/admin/users/{id}/role` to change a member's
+  role (RBAC gated to Team/Enterprise; 402 on Individual). Seat cap enforced on
+  member creation.
+- **Groups / departments:** device-group create/assign already existed; now
+  plan-gated (Team/Enterprise) with a group cap.
+- **Individual (home) mode:** `GET /api/home/summary` — a simplified single-user
+  "is my device protected?" view (plan, device counts, open criticals, overall
+  protected/attention status).
+- **Docs:** `docs/plans-and-tenancy.md`. **Tests:** `server/tests/test_orgs.py`.
+  Full suite **287** green.
+
 ### Testing — feature acceptance suites
 
 - **New `server/tests/test_acceptance.py` (19 checks)** and

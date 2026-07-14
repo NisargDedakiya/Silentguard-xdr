@@ -28,8 +28,10 @@ from .routers import (
     analytics as analytics_router,
     auth as auth_router,
     detections as detections_router,
+    home as home_router,
     integrations as integrations_router,
     intel as intel_router,
+    orgs as orgs_router,
     policies as policies_router,
     responses as responses_router,
     users as users_router,
@@ -125,6 +127,8 @@ app.include_router(responses_router.router)
 app.include_router(analytics_router.router)
 app.include_router(integrations_router.router)
 app.include_router(policies_router.router)
+app.include_router(orgs_router.router)
+app.include_router(home_router.router)
 app.include_router(agents.router)
 app.include_router(admin.router)
 

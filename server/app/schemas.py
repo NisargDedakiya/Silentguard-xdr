@@ -50,6 +50,36 @@ class DeviceGroupOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserRoleUpdate(BaseModel):
+    role: str
+
+
+class OrganizationCreate(BaseModel):
+    name: str
+    slug: str
+    plan: str = "individual"
+    max_devices: int = 0
+
+
+class OrganizationUpdate(BaseModel):
+    name: Optional[str] = None
+    plan: Optional[str] = None
+    max_devices: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class OrganizationOut(BaseModel):
+    id: str
+    name: str
+    slug: str
+    plan: str
+    max_devices: int
+    is_active: bool
+    device_count: int = 0
+    user_count: int = 0
+    created_at: datetime.datetime
+
+
 class PolicyCreate(BaseModel):
     name: str
     group_id: Optional[int] = None  # None = org default

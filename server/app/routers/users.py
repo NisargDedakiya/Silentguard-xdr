@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..auth import Principal, require_permission
 from ..core.permissions import Permission
+from ..core.roles import Role
 from ..database import get_db
 from ..models import AuditLogEntry, User
 from ..services import auth_service
@@ -52,4 +53,27 @@ def disable_user(user_id: str, db: Session = Depends(get_db),
     db.add(AuditLogEntry(actor=principal.actor, action="user_disable",
                          target=user.email, details={}, org_id=user.org_id))
     db.commit()
+    return user
+
+
+@router.patch("/{user_id}/role", response_model=schemas.UserOut)
+def update_role(user_id: str, body: schemas.UserRoleUpdate, db: Session = Depends(get_db),
+                principal: Principal = ManageUsers):
+    """Change a member's role. RBAC (multiple roles) is a Team/Enterprise feature;
+    on the Individual plan there is a single owner, so role changes are gated."""
+    from ..core import plans
+    org_id = owning_org(principal)
+    if not plans.feature_enabled(db, org_id, "rbac"):
+        raise HTTPException(status_code=402,
+                            detail="Role-based access requires the Team or Enterprise plan")
+    if body.role not in {r.value for r in Role}:
+        raise HTTPException(status_code=400, detail=f"Unknown role '{body.role}'")
+    user = db.get(User, user_id)
+    if user is None or (not principal.cross_org and user.org_id != principal.org_id):
+        raise HTTPException(status_code=404, detail="User not found")
+    user.role = body.role
+    db.add(AuditLogEntry(actor=principal.actor, action="user_role_update",
+                         target=user.email, details={"role": body.role}, org_id=user.org_id))
+    db.commit()
+    db.refresh(user)
     return user

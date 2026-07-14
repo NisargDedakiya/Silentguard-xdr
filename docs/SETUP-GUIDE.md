@@ -101,21 +101,39 @@ not configured).
 
 ## Part 4 — Enroll an endpoint (the agent)
 
-On the endpoint, **elevated**:
+**Recommended — use the installer** (installs the agent as an elevated service so
+blocking/isolation work automatically; see `docs/INSTALL.md`):
+
+```powershell
+# Windows (Administrator PowerShell), in agent\install
+.\install-windows.ps1 -ServerUrl "https://<server>:8000" -EnrollToken "<token>"
+```
 ```bash
-# 🧑‍💻 agent
+# Linux (root), in agent/install
+sudo ./install-linux.sh --server https://<server>:8000 --token <token>
+```
+
+The installer runs the agent as **root/SYSTEM** (always elevated), auto-starts it
+on boot, restarts on failure, and — on Windows — disables browser DoH and flushes
+DNS so domain blocking takes effect. **Enforcement is live by default (never
+dry-run).**
+
+<details><summary>Manual run (for quick testing only)</summary>
+
+```bash
 cd agent && python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export SG_SERVER_URL=https://<server>:8000
-export SG_ENROLL_TOKEN=<same as server>
-# Windows: run the shell "as Administrator"; Linux: use sudo -E
-sudo -E python -m silentguard_agent.main
+export SG_SERVER_URL=https://<server>:8000 SG_ENROLL_TOKEN=<same as server>
+sudo -E python -m silentguard_agent.main   # Windows: run the shell "as Administrator"
 ```
-> ⚠️ Do **not** set `SG_DRY_RUN=1` in production — dry‑run only logs actions and
-> never edits the hosts file / firewall.
+⚠️ Must be elevated, and do **not** set `SG_DRY_RUN=1`, or blocking/isolation
+silently no-op.
+</details>
 
-**✅ Check:** the device appears in the dashboard Device Fleet as **online**, and
-`GET /api/admin/events` shows `agent`/`process`/`port_watchdog` telemetry.
+**✅ Check:** the device appears in the Device Fleet as **online**, and the
+dashboard timeline shows an **"Enforcement enabled"** event (not
+"Enforcement disabled"). If you see "Enforcement disabled", the agent isn't
+elevated — use the installer.
 
 ---
 

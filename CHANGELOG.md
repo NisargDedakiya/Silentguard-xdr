@@ -6,6 +6,24 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### Deployment — elevated service installers (enforcement on by setup)
+
+- **New `agent/install/` installers** so setup itself enables enforcement — no
+  manual "run as admin", no dry-run, no per-browser tweaks:
+  - **Linux:** `install-linux.sh` + `silentguard-agent.service` — installs under
+    `/opt/silentguard`, writes `/etc/silentguard/agent.env` (0600), and runs a
+    **systemd service as root** (auto-start on boot, restart on failure).
+  - **Windows:** `install-windows.ps1` — registers a **Scheduled Task running as
+    SYSTEM** at startup (highest privileges, restart-on-failure), **disables
+    browser DNS-over-HTTPS** via Chrome/Edge policy, and flushes DNS so hosts
+    blocking takes effect. Uninstallers for both.
+- **Agent startup capability report** (`privileges.py`): logs and emits a
+  dashboard event — `Enforcement enabled` (elevated/live) or `enforcement_disabled`
+  with the reason (not elevated / dry-run) — so a silently‑no‑op blocklist is now
+  visible. Tests: `agent/tests/test_privileges.py`.
+- **Docs:** `docs/INSTALL.md`; `SETUP-GUIDE.md` Part 4 now recommends the
+  installer.
+
 ### Domain/URL blocking — subdomain-aware
 
 - **Blocking a domain now covers all of its subdomains.** New shared matcher

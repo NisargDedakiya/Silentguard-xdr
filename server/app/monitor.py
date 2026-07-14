@@ -9,22 +9,19 @@ did not restart — a possible tamper attempt.
 import asyncio
 import datetime
 import logging
-import os
 
 from . import alerting
+from .core.config import settings
 from .database import SessionLocal
-from .mitre import technique_for
 from .models import Device, ThreatEvent, utcnow
+from .services import events
+from .utils.time import aware_utc
 from .ws import hub
 
 log = logging.getLogger("silentguard.monitor")
 
-UNRESPONSIVE_SECONDS = int(os.environ.get("SG_UNRESPONSIVE_SECONDS", "45"))
-SCAN_INTERVAL_SECONDS = int(os.environ.get("SG_MONITOR_INTERVAL", "15"))
-
-
-def _aware(dt: datetime.datetime) -> datetime.datetime:
-    return dt if dt.tzinfo else dt.replace(tzinfo=datetime.timezone.utc)
+UNRESPONSIVE_SECONDS = settings.unresponsive_seconds
+SCAN_INTERVAL_SECONDS = settings.monitor_interval_seconds
 
 
 async def check_once() -> list[str]:
@@ -35,12 +32,13 @@ async def check_once() -> list[str]:
         threshold = datetime.timedelta(seconds=UNRESPONSIVE_SECONDS)
         now = utcnow()
         for device in db.query(Device).all():
-            silent_for = now - _aware(device.last_seen)
+            silent_for = now - aware_utc(device.last_seen)
             if silent_for <= threshold or device.stopped or device.unresponsive_alerted:
                 continue
             device.unresponsive_alerted = True
             event = ThreatEvent(
                 device_id=device.id,
+                org_id=device.org_id,
                 source="agent",
                 severity="critical",
                 action="device_unresponsive",
@@ -52,28 +50,16 @@ async def check_once() -> list[str]:
             )
             db.add(event)
             db.flush()
-            flagged.append(
-                {
-                    "id": event.id,
-                    "device_id": device.id,
-                    "hostname": device.hostname,
-                    "timestamp": event.timestamp,
-                    "source": event.source,
-                    "severity": event.severity,
-                    "action": event.action,
-                    "summary": event.summary,
-                    "details": event.details,
-                    "mitre": technique_for(event.source, event.action),
-                }
-            )
+            # Serialize while the event is still attached to the session.
+            flagged.append(events.broadcast_payload(event, device.hostname))
         db.commit()
     finally:
         db.close()
 
     for payload in flagged:
-        await hub.broadcast({"type": "threat_event", **payload})
+        await hub.broadcast(payload)
         await alerting.notify_critical(payload)
-    return [f["hostname"] for f in flagged]
+    return [p["hostname"] for p in flagged]
 
 
 async def run_monitor_loop() -> None:

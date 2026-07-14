@@ -215,11 +215,34 @@ Test dependencies (pytest, pytest-asyncio, httpx2) ship in
 `server/requirements.txt`, so a fresh `pip install -r requirements.txt`
 is all that's needed before `pytest -q`.
 
+## Behavioral detection engine
+
+Ingested telemetry is evaluated by a rule-based engine that produces scored
+**detections** (Low/Medium/High/Critical) tagged with ATT&CK techniques and
+configurable responses. Seed rules cover reverse shells, suspicious listeners,
+PowerShell abuse, encoded commands, and LOLBins. Triage them at
+`/api/admin/detections`. See [`docs/detection-engine.md`](docs/detection-engine.md).
+
+## Configuration & observability
+
+All backend settings are centralized in `server/app/core/config.py` (typed,
+`pydantic-settings`). The server emits structured JSON logs with a per-request
+correlation id (`X-Request-ID`), sets secure response headers, and returns a
+stable error envelope for unhandled exceptions. See
+[`docs/configuration.md`](docs/configuration.md) for the full environment
+variable reference. The enterprise upgrade plan lives in
+[`docs/ROADMAP.md`](docs/ROADMAP.md); the pre-work audit is
+[`docs/AUDIT.md`](docs/AUDIT.md).
+
 ## Security design
 
 - Per-device API keys issued at enrollment (`X-Agent-Key`) authenticate all telemetry.
-- Shared enrollment token gates onboarding; shared admin token (`X-Admin-Token`)
-  gates the dashboard API (RBAC/SSO/MFA are on the enterprise roadmap).
+- User accounts with JWT access/refresh tokens gate the dashboard API
+  (`/api/auth/*`, `Authorization: Bearer …`), with account lockout, login rate
+  limiting, and a password policy — see [`docs/authentication.md`](docs/authentication.md).
+  The legacy shared admin token (`X-Admin-Token`) is still accepted for
+  backward compatibility. Full RBAC/SSO/MFA remain on the roadmap.
+- Shared enrollment token gates agent onboarding.
 - The live WebSocket (`/api/ws`) requires the admin token (query param or first
   message) and closes unauthenticated connections with a policy violation.
 - Token comparisons use `secrets.compare_digest`; the audit log stores only a

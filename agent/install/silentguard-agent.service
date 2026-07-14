@@ -1,0 +1,19 @@
+[Unit]
+Description=SilentGuard XDR Endpoint Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs as root so enforcement (DNS sinkhole / firewall isolation / USB) works.
+User=root
+WorkingDirectory=/opt/silentguard
+EnvironmentFile=/etc/silentguard/agent.env
+ExecStart=/opt/silentguard/venv/bin/python -m silentguard_agent.main
+Restart=always
+RestartSec=5
+# Harden the service a little without breaking the enforcement it needs.
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target

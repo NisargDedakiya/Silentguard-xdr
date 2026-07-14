@@ -11,13 +11,10 @@ import datetime
 from sqlalchemy.orm import Session
 
 from .models import ThreatEvent, utcnow
+from .utils.time import aware_utc
 
 SEVERITY_WEIGHTS = {"critical": 10.0, "warning": 3.0, "info": 0.0}
 WINDOW = datetime.timedelta(hours=24)
-
-
-def _aware(dt: datetime.datetime) -> datetime.datetime:
-    return dt if dt.tzinfo else dt.replace(tzinfo=datetime.timezone.utc)
 
 
 def risk_band(score: float) -> str:
@@ -64,7 +61,7 @@ def compute_scores(db: Session, device_ids: list[str] | None = None) -> dict[str
         weight = SEVERITY_WEIGHTS.get(severity, 0.0)
         if weight == 0.0:
             continue
-        age = (now - _aware(timestamp)).total_seconds()
+        age = (now - aware_utc(timestamp)).total_seconds()
         decay = max(0.0, 1.0 - age / window_seconds)
         raw[device_id] = raw.get(device_id, 0.0) + weight * decay
     for device_id, value in raw.items():

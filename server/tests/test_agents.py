@@ -58,7 +58,9 @@ def test_telemetry_stores_events(client, enrolled_device):
         },
     )
     assert resp.status_code == 200
-    assert resp.json() == {"accepted": 2}
+    body = resp.json()
+    assert body["accepted"] == 2
+    assert body["detections"] == 1  # the port_watchdog kill triggers the reverse-shell rule
 
     events = client.get("/api/admin/events", headers=ADMIN_HEADERS).json()
     critical = [e for e in events if e["severity"] == "critical"]

@@ -1,5 +1,4 @@
 """Agent-facing endpoints: enrollment, telemetry ingestion, check-in."""
-import datetime
 import secrets
 import uuid
 
@@ -9,8 +8,9 @@ from sqlalchemy.orm import Session
 from .. import alerting, schemas
 from ..auth import ENROLL_TOKEN, require_agent
 from ..database import get_db
-from ..mitre import technique_for
-from ..models import BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
+from ..detection import engine as detection_engine
+from ..models import DEFAULT_ORG_ID, BlocklistEntry, Device, QuarantineItem, ThreatEvent, utcnow
+from ..services import events
 from ..ws import hub
 
 
@@ -26,6 +26,7 @@ def _sync_quarantine(db: Session, device: Device, ev: schemas.TelemetryEvent) ->
                 QuarantineItem(
                     id=qid,
                     device_id=device.id,
+                    org_id=device.org_id,
                     original_path=details.get("original_path", ""),
                     sha256=details.get("sha256") or "",
                     reason=details.get("reason", ""),
@@ -49,8 +50,18 @@ router = APIRouter(prefix="/api/agent", tags=["agent"])
 async def enroll(req: schemas.EnrollRequest, db: Session = Depends(get_db)):
     if not secrets.compare_digest(req.enroll_token, ENROLL_TOKEN):
         raise HTTPException(status_code=401, detail="Invalid enrollment token")
+    # Enforce the plan's device cap (0 = unlimited); an org-level max_devices
+    # override wins over the plan default (see core/plans.py).
+    from ..core import plans
+    limit = plans.entitlements_for(db, DEFAULT_ORG_ID)["max_devices"]
+    if limit > 0:
+        current = db.query(Device).filter(Device.org_id == DEFAULT_ORG_ID).count()
+        if current >= limit:
+            raise HTTPException(status_code=402,
+                                detail="Device limit reached for this plan")
     device = Device(
         id=str(uuid.uuid4()),
+        org_id=DEFAULT_ORG_ID,
         hostname=req.hostname,
         platform=req.platform,
         agent_version=req.agent_version,
@@ -59,6 +70,7 @@ async def enroll(req: schemas.EnrollRequest, db: Session = Depends(get_db)):
     db.add(
         ThreatEvent(
             device_id=device.id,
+            org_id=device.org_id,
             source="agent",
             severity="info",
             action="enrolled",
@@ -87,9 +99,16 @@ async def telemetry(
             device.stopped = False
         if ev.source in ("quarantine", "file_drop"):
             _sync_quarantine(db, device, ev)
+        if ev.source == "response" and ev.action == "result":
+            from ..services import response as response_service
+            details = ev.details or {}
+            if details.get("action_id"):
+                response_service.record_result(
+                    db, int(details["action_id"]), details.get("status", "ok"), details)
 
         row = ThreatEvent(
             device_id=device.id,
+            org_id=device.org_id,
             timestamp=ev.timestamp or utcnow(),
             source=ev.source,
             severity=ev.severity,
@@ -100,23 +119,44 @@ async def telemetry(
         db.add(row)
         stored.append(row)
     db.commit()
+
+    # Run the behavioral detection engine over the freshly stored events.
+    detections = []
     for row in stored:
-        payload = {
-            "type": "threat_event",
-            "id": row.id,
-            "device_id": device.id,
-            "hostname": device.hostname,
-            "timestamp": row.timestamp,
-            "source": row.source,
-            "severity": row.severity,
-            "action": row.action,
-            "summary": row.summary,
-            "details": row.details,
-            "mitre": technique_for(row.source, row.action),
-        }
+        detections.extend(detection_engine.evaluate_event(db, device, row))
+    if detections:
+        db.commit()
+
+    from ..services import integrations as integ_service
+
+    for row in stored:
+        payload = events.broadcast_payload(row, device.hostname)
         await hub.broadcast(payload)
         await alerting.notify_critical(payload)
-    return {"accepted": len(stored)}
+        integ_service.dispatch(db, device.org_id, payload)
+    for det in detections:
+        det_payload = detection_engine.detection_payload(det, device.hostname)
+        await hub.broadcast(det_payload)
+        await detection_engine.dispatch_responses(db, det, device)
+        integ_service.dispatch(db, det.org_id, det_payload)
+    return {"accepted": len(stored), "detections": len(detections)}
+
+
+@router.post("/inventory")
+async def report_inventory(
+    report: schemas.InventoryReport,
+    device: Device = Depends(require_agent),
+    db: Session = Depends(get_db),
+):
+    """Agent posts its hardware/software/posture snapshot; stored as the latest
+    inventory for the device."""
+    from ..services.inventory import upsert_inventory
+
+    device.last_seen = utcnow()
+    device.unresponsive_alerted = False
+    inv = upsert_inventory(db, device, report)
+    db.commit()
+    return {"device_id": device.id, "health": inv.health}
 
 
 @router.get("/checkin", response_model=schemas.CheckinResponse)
@@ -127,9 +167,15 @@ async def checkin(device: Device = Depends(require_agent), db: Session = Depends
     device.unresponsive_alerted = False
     commands = list(device.pending_commands or [])
     device.pending_commands = []
-    entries = db.query(BlocklistEntry).all()
+    # An agent receives its own organization's blocklist.
+    entries = db.query(BlocklistEntry).filter(
+        BlocklistEntry.org_id == (device.org_id or DEFAULT_ORG_ID)
+    ).all()
     blocklist: dict[str, list[str]] = {"domain": [], "process": [], "port": []}
     for e in entries:
         blocklist.setdefault(e.kind, []).append(e.value)
+    from ..services.policy import resolve_effective_policy
+    policy = resolve_effective_policy(db, device)
     db.commit()
-    return schemas.CheckinResponse(isolated=device.isolated, commands=commands, blocklist=blocklist)
+    return schemas.CheckinResponse(isolated=device.isolated, commands=commands,
+                                   blocklist=blocklist, policy=policy)

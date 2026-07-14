@@ -12,16 +12,81 @@ from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import ADMIN_TOKEN
-from .database import Base, engine
+from .core.config import settings
+from .core.errors import register_error_handlers
+from .core.logging import configure_logging, get_logger
+from .core.middleware import (
+    BodySizeLimitMiddleware,
+    RequestContextMiddleware,
+    SecureHeadersMiddleware,
+)
+from .database import Base, SessionLocal, engine
 from .monitor import run_monitor_loop
-from .routers import admin, agents
+from .routers import (
+    admin,
+    agents,
+    analytics as analytics_router,
+    auth as auth_router,
+    detections as detections_router,
+    home as home_router,
+    integrations as integrations_router,
+    intel as intel_router,
+    orgs as orgs_router,
+    policies as policies_router,
+    responses as responses_router,
+    users as users_router,
+)
+from .services.auth_service import maybe_bootstrap_admin
+from .services.tenancy import ensure_default_org
 from .ws import hub
 
-Base.metadata.create_all(bind=engine)
+configure_logging(settings.log_level, settings.log_format)
+log = get_logger("silentguard.main")
+
+# Schema management:
+#   * SQLite (dev/demo default): auto-create missing tables for zero-config
+#     startup, exactly as before — the one-command demo keeps working.
+#   * Other backends (production Postgres): schema is owned by Alembic; run
+#     `alembic upgrade head`. We do NOT create_all there so migrations remain
+#     the single source of truth. See docs/migrations.md.
+if settings.database_url.startswith("sqlite"):
+    Base.metadata.create_all(bind=engine)
 
 
 @contextlib.asynccontextmanager
+def _check_production_secrets() -> None:
+    """Warn loudly if a production deployment is running on demo defaults."""
+    if not settings.is_production:
+        return
+    problems = []
+    if settings.admin_token == "silentguard-admin-demo":
+        problems.append("SG_ADMIN_TOKEN is the demo default")
+    if settings.enroll_token == "silentguard-enroll-demo":
+        problems.append("SG_ENROLL_TOKEN is the demo default")
+    if not settings.jwt_secret:
+        problems.append("SG_JWT_SECRET is unset (derived from the admin token)")
+    if settings.cors_origin_list == ["*"]:
+        problems.append("SG_CORS_ORIGINS is '*'")
+    for p in problems:
+        log.warning("INSECURE PRODUCTION CONFIG: %s", p)
+
+
 async def lifespan(app: FastAPI):
+    log.info("service starting", extra={"environment": settings.environment})
+    _check_production_secrets()
+    with contextlib.suppress(Exception):
+        db = SessionLocal()
+        try:
+            ensure_default_org(db)
+            maybe_bootstrap_admin(db)
+            if settings.intel_feed_file:
+                from .models import DEFAULT_ORG_ID
+                from .services import threat_intel
+                entries = threat_intel.load_feed_file(settings.intel_feed_file)
+                if entries:
+                    threat_intel.import_iocs(db, DEFAULT_ORG_ID, entries, "startup-feed")
+        finally:
+            db.close()
     task = asyncio.create_task(run_monitor_loop())
     try:
         yield
@@ -29,17 +94,41 @@ async def lifespan(app: FastAPI):
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+        log.info("service stopped")
 
 
-app = FastAPI(title="SilentGuard XDR", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="SilentGuard XDR",
+    version="0.1.0",
+    description="Autonomous endpoint detection & response platform — Command "
+                "Matrix API. Interactive docs at /docs; schema at /openapi.json.",
+    lifespan=lifespan,
+)
 
+# Middleware runs in reverse registration order for requests; register the
+# request-context (correlation id + access log) last so it wraps everything.
+app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(SecureHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origin_list,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestContextMiddleware)
 
+register_error_handlers(app)
+
+app.include_router(auth_router.router)
+app.include_router(users_router.router)
+app.include_router(detections_router.router)
+app.include_router(intel_router.router)
+app.include_router(responses_router.router)
+app.include_router(analytics_router.router)
+app.include_router(integrations_router.router)
+app.include_router(policies_router.router)
+app.include_router(orgs_router.router)
+app.include_router(home_router.router)
 app.include_router(agents.router)
 app.include_router(admin.router)
 

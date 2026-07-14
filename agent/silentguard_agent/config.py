@@ -14,6 +14,9 @@ from pathlib import Path
 STATE_DIR = Path(os.environ.get("SG_STATE_DIR", Path.home() / ".silentguard"))
 STATE_FILE = STATE_DIR / "agent_state.json"
 REPUTATION_FILE = STATE_DIR / "reputation.json"
+# Durable offline telemetry spool: events survive an agent restart during a
+# connectivity gap so nothing is lost.
+QUEUE_FILE = STATE_DIR / "telemetry_queue.json"
 
 # SHA-256 of the EICAR standard antivirus test file — a safe, universally
 # recognized "known bad" for demos and tests.
@@ -27,6 +30,7 @@ class AgentConfig:
     verify_tls: bool = os.environ.get("SG_VERIFY_TLS", "1") != "0"
     poll_interval: float = float(os.environ.get("SG_POLL_INTERVAL", "3"))
     checkin_interval: float = float(os.environ.get("SG_CHECKIN_INTERVAL", "10"))
+    inventory_interval: float = float(os.environ.get("SG_INVENTORY_INTERVAL", "300"))
     hostname: str = field(default_factory=socket.gethostname)
     platform: str = field(default_factory=lambda: f"{platform.system()} {platform.release()}")
     # Detection defaults (extended at runtime by fleet blocklist pushes)
@@ -58,6 +62,31 @@ class AgentConfig:
     # USB policy: when True, newly inserted USB mass-storage devices are
     # blocked (best effort) instead of just reported.
     block_usb_storage: bool = os.environ.get("SG_BLOCK_USB_STORAGE", "0") == "1"
+    # Signed agent updates (M15a): trust key(s) an update manifest must be
+    # signed with. Ed25519 public key (hex/base64) is preferred; an HMAC shared
+    # secret is a dependency-free fallback. When require_signed_updates is on
+    # (default), an update carrying a url/sha256 manifest is honored only with a
+    # valid signature; a version-only acknowledgement stays best-effort.
+    update_public_key: str = os.environ.get("SG_UPDATE_PUBLIC_KEY", "")
+    update_hmac_key: str = os.environ.get("SG_UPDATE_HMAC_KEY", "")
+    require_signed_updates: bool = os.environ.get("SG_REQUIRE_SIGNED_UPDATES", "1") != "0"
+    # YARA file scanning (v1.3): scan newly-dropped files against a rule set.
+    # Off unless enabled with a rules path (file or directory of .yar/.yara) and
+    # the yara-python package present; degrades to a no-op otherwise.
+    yara_enabled: bool = os.environ.get("SG_YARA_ENABLED", "0") == "1"
+    yara_rules_path: str = os.environ.get("SG_YARA_RULES", "")
+    yara_quarantine: bool = os.environ.get("SG_YARA_QUARANTINE", "1") != "0"
+    # TLS certificate pinning (v1.4): SHA-256 fingerprint of the server leaf
+    # cert (hex, colons optional). Empty = default CA verification only.
+    pin_sha256: str = os.environ.get("SG_PIN_SHA256", "")
+    # Suricata IDS integration (v1.5): tail an eve.json log and forward alerts.
+    suricata_enabled: bool = os.environ.get("SG_SURICATA_ENABLED", "0") == "1"
+    suricata_eve_path: str = os.environ.get("SG_SURICATA_EVE", "/var/log/suricata/eve.json")
+    # Registry autorun monitor (v1.3): Windows-only; watches Run/RunOnce keys.
+    # Active only on Windows; a no-op elsewhere regardless of this flag.
+    registry_enabled: bool = os.environ.get("SG_REGISTRY_ENABLED", "1") != "0"
+    # State-file tamper protection (v1.4): integrity key for the state HMAC.
+    tamper_key: str = os.environ.get("SG_TAMPER_KEY", "")
 
     def __post_init__(self) -> None:
         rep = load_reputation()
@@ -74,6 +103,15 @@ def load_reputation() -> dict:
         return {}
 
 
+def effective_tamper_key() -> str:
+    """Integrity key for the state HMAC. Prefer an out-of-band secret; else
+    derive from stable machine attributes (weaker — set SG_TAMPER_KEY)."""
+    key = os.environ.get("SG_TAMPER_KEY", "")
+    if key:
+        return key
+    return f"sg-tamper::{platform.node()}::{platform.system()}"
+
+
 def load_state() -> dict:
     try:
         return json.loads(STATE_FILE.read_text())
@@ -82,9 +120,42 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
+    from . import tamper
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state))
+    signed = tamper.sign(state, effective_tamper_key())
+    STATE_FILE.write_text(json.dumps(signed))
     try:
         os.chmod(STATE_FILE, 0o600)
+    except OSError:
+        pass
+
+
+def get_update_floor() -> str:
+    """Highest update version accepted so far (anti-rollback floor)."""
+    return str(load_state().get("update_floor", ""))
+
+
+def set_update_floor(version: str) -> None:
+    """Persist a new anti-rollback floor into the (tamper-protected) state."""
+    state = load_state()
+    state["update_floor"] = str(version)
+    save_state(state)  # re-signs the state file
+
+
+def load_queue() -> list:
+    """Load the persisted offline telemetry spool (empty on any error)."""
+    try:
+        data = json.loads(QUEUE_FILE.read_text())
+        return data if isinstance(data, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def save_queue(events: list) -> None:
+    """Persist the offline telemetry spool (best-effort, owner-only perms)."""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        QUEUE_FILE.write_text(json.dumps(events))
+        os.chmod(QUEUE_FILE, 0o600)
     except OSError:
         pass

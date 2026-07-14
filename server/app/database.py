@@ -1,11 +1,11 @@
 """Database setup. Defaults to SQLite for the MVP demo; set DATABASE_URL to a
 PostgreSQL DSN (postgresql+psycopg2://...) for a production-like deployment."""
-import os
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./silentguard.db")
+from .core.config import settings
+
+DATABASE_URL = settings.database_url
 
 engine = create_engine(
     DATABASE_URL,

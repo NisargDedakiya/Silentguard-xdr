@@ -29,6 +29,7 @@ from .monitors.registry_monitor import RegistryMonitor
 from .monitors.suricata_monitor import SuricataMonitor
 from .monitors.usb_guard import UsbGuard
 from .monitors.yara_scanner import YaraScanner
+from .privileges import enforcement_status
 from .quarantine import QuarantineManager
 from . import response_handlers as handlers
 from .telemetry import TelemetryClient
@@ -129,6 +130,25 @@ def run() -> None:
     signal.signal(signal.SIGTERM, stop)
 
     telemetry.emit("agent", "started", f"SilentGuard agent online on {config.hostname}")
+
+    # Tell the operator up front whether enforcement can actually take effect;
+    # otherwise a blocklist/isolation that silently no-ops looks like a bug.
+    status = enforcement_status(config)
+    if status["can_enforce"]:
+        log.info("Enforcement enabled (elevated, live mode)")
+        telemetry.emit("agent", "capabilities",
+                       "Enforcement enabled: domain blocking, isolation, USB control active",
+                       severity="info", details=status)
+    else:
+        reason = "; ".join(status["reasons"])
+        log.warning("ENFORCEMENT DISABLED (%s). Blocklist, isolation and USB "
+                    "blocking will NOT take effect. Run the agent elevated "
+                    "(Administrator/root) and without SG_DRY_RUN to enforce.", reason)
+        telemetry.emit("agent", "enforcement_disabled",
+                       f"Enforcement disabled: {reason}. Domain blocking and "
+                       f"isolation will not take effect until the agent runs elevated.",
+                       severity="warning", details=status)
+
     last_checkin = 0.0
     last_inventory = 0.0
 

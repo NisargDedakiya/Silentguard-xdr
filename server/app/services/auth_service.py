@@ -86,6 +86,80 @@ def create_user(db: Session, email: str, password: str, role: str = Role.READ_ON
     return user
 
 
+# -- self-service signup + invitations (SaaS team model) ------------------
+def _unique_slug(db: Session, name: str) -> str:
+    from ..models import Organization
+
+    base = "".join(c if c.isalnum() else "-" for c in name.strip().lower()).strip("-") or "org"
+    base = base[:48]
+    slug = base
+    i = 1
+    while db.query(Organization).filter(Organization.slug == slug).first():
+        i += 1
+        slug = f"{base}-{i}"
+    return slug
+
+
+def signup(db: Session, email: str, password: str, org_name: str,
+           plan: str = "individual") -> User:
+    """Self-service registration: create a new organization and its OWNER.
+
+    Only self-serve plans (individual/team) are allowed; enterprise is sales-led.
+    """
+    from ..models import Organization
+
+    plan = plan if plan in ("individual", "team") else "individual"
+    email = email.strip().lower()
+    if db.query(User).filter(User.email == email).first():
+        raise AuthError(409, "A user with that email already exists")
+    validate_password(password)
+    org = Organization(name=(org_name.strip() or email), slug=_unique_slug(db, org_name or email),
+                       plan=plan)
+    db.add(org)
+    db.flush()  # assign org.id
+    user = User(email=email, hashed_password=hash_password(password),
+                role=Role.OWNER.value, org_id=org.id, email_verified=False)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    log.info("signup", extra={"email": email, "org": org.slug, "plan": plan})
+    return user
+
+
+def invite_member(db: Session, org_id: str, email: str, role: str) -> tuple[User, str]:
+    """Invite a teammate to an org: create a pending (inactive) member and issue a
+    single-use invite token. The member activates by setting a password."""
+    email = email.strip().lower()
+    if role not in {r.value for r in Role}:
+        raise AuthError(400, f"Unknown role '{role}'")
+    if db.query(User).filter(User.email == email).first():
+        raise AuthError(409, "A user with that email already exists")
+    user = User(email=email, hashed_password=hash_password(secrets.token_urlsafe(24)),
+                role=role, org_id=org_id, is_active=False)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    raw = _issue_token(db, user, "invite", 7 * 86400)
+    email_service.send_email(email, "You're invited to SilentGuard",
+                             f"Accept your invite with this token: {raw}")
+    return user, raw
+
+
+def accept_invite(db: Session, raw: str, password: str) -> User:
+    """Activate an invited member by setting their password."""
+    user = _consume_token(db, raw, "invite")
+    if user is None:
+        raise AuthError(400, "Invalid or expired invitation")
+    validate_password(password)
+    user.hashed_password = hash_password(password)
+    user.is_active = True
+    user.email_verified = True
+    db.commit()
+    db.refresh(user)
+    log.info("invite accepted", extra={"email": user.email})
+    return user
+
+
 # -- login ----------------------------------------------------------------
 def authenticate(db: Session, email: str, password: str, client_key: str = "") -> User:
     if _rate_limited(client_key or email):

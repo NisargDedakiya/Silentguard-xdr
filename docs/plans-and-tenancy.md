@@ -40,6 +40,37 @@ return **HTTP 402** ("upgrade your plan"):
 Clients discover what's unlocked via **`GET /api/admin/entitlements`**, which
 returns the caller org's plan and feature flags — use it to render the right UI.
 
+## The SaaS role model (like normal team software)
+
+The lifecycle works the way people expect from Slack/GitHub/etc.:
+
+1. **Sign up** — `POST /api/auth/signup { email, password, org_name, plan }`
+   creates a **new organization** and makes you its **Owner**, then signs you in.
+   Self-serve plans are `individual` and `team` (Enterprise is sales-led — a
+   requested `enterprise` plan is coerced to `individual`).
+2. **Owner** (`owner` role) has **full control of their own org** — manage
+   members, policies, integrations, response — but is **org-scoped** (sees only
+   their tenant) and cannot administer other organizations. The platform
+   operator (`super_admin`) is the only cross-org role.
+3. **Invite teammates** — `POST /api/admin/users/invite { email, role }` creates
+   a pending member and returns a single-use invite token (emailed; also in the
+   response outside production). Seat cap is enforced by plan.
+4. **Accept** — `POST /api/auth/accept-invite { token, password }` activates the
+   member (sets their password) and signs them in.
+
+### Role hierarchy
+
+| Role | Scope | Purpose |
+|---|---|---|
+| `super_admin` | **All orgs** (cross-org) | Platform operator |
+| `owner` | One org (full) | Org owner — manages their whole tenant |
+| `soc_manager` | One org | Runs the SOC: response, intel, integrations, policy |
+| `threat_hunter` / `analyst` / `responder` | One org | Focused member roles |
+| `auditor` / `read_only` | One org | Observers |
+
+Role assignment (`PATCH /api/admin/users/{id}/role`) is a Team/Enterprise
+feature; on Individual there is a single owner.
+
 ## Organization management (super-admin)
 
 `MANAGE_ORGS` (super-admin only):

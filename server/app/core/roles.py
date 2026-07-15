@@ -8,7 +8,8 @@ from enum import Enum
 
 
 class Role(str, Enum):
-    SUPER_ADMIN = "super_admin"
+    SUPER_ADMIN = "super_admin"   # platform operator — sees/manages ALL orgs
+    OWNER = "owner"               # owns ONE org — full control of their own tenant
     SOC_MANAGER = "soc_manager"
     ANALYST = "analyst"
     THREAT_HUNTER = "threat_hunter"
@@ -21,12 +22,12 @@ class Role(str, Enum):
 # M4 backward compatible with the single-admin model while the full permission
 # matrix is introduced in M5.
 ADMIN_CAPABLE_ROLES: frozenset[Role] = frozenset(
-    {Role.SUPER_ADMIN, Role.SOC_MANAGER, Role.ANALYST, Role.THREAT_HUNTER,
-     Role.RESPONDER, Role.AUDITOR, Role.READ_ONLY}
+    {Role.SUPER_ADMIN, Role.OWNER, Role.SOC_MANAGER, Role.ANALYST,
+     Role.THREAT_HUNTER, Role.RESPONDER, Role.AUDITOR, Role.READ_ONLY}
 )
 
 # Roles that may mutate state (isolate, blocklist, quarantine restore). Read-only
 # and auditor are observers. Enforced granularly in M5; defined here for clarity.
 MUTATING_ROLES: frozenset[Role] = frozenset(
-    {Role.SUPER_ADMIN, Role.SOC_MANAGER, Role.RESPONDER}
+    {Role.SUPER_ADMIN, Role.OWNER, Role.SOC_MANAGER, Role.RESPONDER}
 )

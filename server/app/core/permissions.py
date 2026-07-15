@@ -39,6 +39,9 @@ _POLICY = frozenset({Permission.MANAGE_POLICY})
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
     Role.SUPER_ADMIN: _ALL,
+    # Owner has full control of their OWN org (manage members, policy, intel,
+    # integrations, response) but not platform-wide org administration.
+    Role.OWNER: _ALL - frozenset({Permission.MANAGE_ORGS}),
     Role.SOC_MANAGER: _READ | _RESPOND | _TRIAGE | _INTEL | _INTEGRATIONS | _POLICY,
     Role.ANALYST: _READ | _TRIAGE,
     Role.THREAT_HUNTER: _READ | _TRIAGE | _INTEL,

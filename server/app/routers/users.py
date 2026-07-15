@@ -43,6 +43,29 @@ def create_user(body: schemas.UserCreate, db: Session = Depends(get_db),
     return user
 
 
+@router.post("/invite", response_model=schemas.InviteResponse, status_code=201)
+def invite_member(body: schemas.InviteRequest, db: Session = Depends(get_db),
+                  principal: Principal = ManageUsers):
+    """Invite a teammate to this organization (org-scoped, seat-capped by plan)."""
+    from ..core import plans
+    org_id = owning_org(principal)
+    current = db.query(User).filter(User.org_id == org_id).count()
+    if not plans.within_limit(db, org_id, "max_users", current):
+        raise HTTPException(status_code=402,
+                            detail="Seat limit reached for this plan; upgrade to invite more")
+    try:
+        user, raw = auth_service.invite_member(db, org_id, body.email, body.role)
+    except auth_service.AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    db.add(AuditLogEntry(actor=principal.actor, action="user_invite",
+                         target=body.email, details={"role": body.role}, org_id=org_id))
+    db.commit()
+    from ..core.config import settings
+    return schemas.InviteResponse(
+        email=user.email, role=user.role,
+        invite_token=raw if settings.should_expose_tokens else None)
+
+
 @router.post("/{user_id}/disable", response_model=schemas.UserOut)
 def disable_user(user_id: str, db: Session = Depends(get_db),
                  principal: Principal = ManageUsers):

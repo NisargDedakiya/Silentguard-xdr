@@ -1,0 +1,4 @@
+psutil>=5.9
+# Build-time only (produces the .exe):
+# pyinstaller>=6.0
+# tkinter ships with the standard Python installer on Windows (no pip needed).

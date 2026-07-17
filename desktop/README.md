@@ -1,3 +1,39 @@
+# SilentGuard desktop apps
+
+Two native Windows apps (no browser needed):
+
+- **SilentGuard Console** (`silentguard_console`) — the **admin console as a
+  desktop app**. Connects to your SilentGuard server and gives you Fleet,
+  Threats, Blocklist, and Account/Members in a native window instead of a web
+  page. Build: `build-console-windows.ps1` → `dist\SilentGuardConsole.exe`.
+- **SilentGuard Home** (`silentguard_home`) — a standalone app that protects
+  **one PC** with no server (below).
+
+## SilentGuard Console (desktop admin app)
+
+Build once on Windows (Python 3.11+):
+
+```powershell
+cd desktop
+powershell -ExecutionPolicy Bypass -File .\build-console-windows.ps1
+```
+
+Launch `dist\SilentGuardConsole.exe`, enter your **Server URL** (e.g.
+`http://your-server:8000`), and sign in with either an **admin token** or your
+**email/password**. Tabs:
+
+- **Fleet** — devices, status, risk, isolate/release.
+- **Threats** — detections (time, severity, rule, device).
+- **Blocklist** — add/remove domain/process/port blocks.
+- **Account** — your plan + unlocked features, member list, and invite members.
+
+Tested: `desktop/tests/test_console_api.py` (7 checks) exercises the API client
+(auth, reads, block add/remove, isolate, error handling) with a fake HTTP
+session. The Tkinter GUI and `.exe` can't be built/run in the Linux CI sandbox —
+build on your PC and paste any errors.
+
+---
+
 # SilentGuard Home — standalone Windows PC protection app
 
 A single desktop app that protects **this one PC** — no server, no browser, no

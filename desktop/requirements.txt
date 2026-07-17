@@ -1,4 +1,5 @@
-psutil>=5.9
+psutil>=5.9          # SilentGuard Home: process guard
+requests>=2.31       # SilentGuard Console: server API client
 # Build-time only (produces the .exe):
 # pyinstaller>=6.0
 # tkinter ships with the standard Python installer on Windows (no pip needed).

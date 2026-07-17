@@ -21,6 +21,39 @@ def _audit(db: Session, actor: str, action: str, target: str, org_id: str | None
     db.commit()
 
 
+@router.post("/provision", response_model=schemas.ProvisionResponse, status_code=201)
+def provision(body: schemas.ProvisionRequest, db: Session = Depends(get_db)):
+    """Purchase/provision a subscription. Returns the keys the buyer receives:
+    an **admin key** (dashboard login) for every plan, plus a shareable
+    **invite/join key** for Group and Enterprise."""
+    try:
+        result = auth_service.provision(db, body.plan, body.org_name, body.admin_email)
+    except auth_service.AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    _audit(db, "provision", "provision", result["slug"], org_id=result["org_id"])
+    return result
+
+
+@router.post("/key-login", response_model=schemas.TokenResponse)
+def key_login(body: schemas.KeyLoginRequest, db: Session = Depends(get_db)):
+    """Log into the dashboard with an admin key."""
+    try:
+        user = auth_service.key_login(db, body.admin_key)
+        return auth_service.issue_tokens(db, user)
+    except auth_service.AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+@router.post("/join", response_model=schemas.TokenResponse, status_code=201)
+def join(body: schemas.JoinRequest, db: Session = Depends(get_db)):
+    """Join a group/enterprise with its invite key (signs you in)."""
+    try:
+        user = auth_service.join_via_invite(db, body.invite_key, body.email, body.password)
+        return auth_service.issue_tokens(db, user)
+    except auth_service.AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
 @router.post("/signup", response_model=schemas.TokenResponse, status_code=201)
 def signup(body: schemas.SignupRequest, db: Session = Depends(get_db)):
     """Self-service registration: creates a new organization and signs you in as

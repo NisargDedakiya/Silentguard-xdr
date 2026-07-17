@@ -6,6 +6,22 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### Key-based purchase model (Individual / Group / Enterprise)
+
+- **Provisioning by purchase:** `POST /api/auth/provision { plan, org_name }`
+  creates the org + Owner and mints keys — an **admin key** (dashboard login) for
+  every plan, plus a shareable **invite/join key** for Group and Enterprise.
+- **Admin-key login:** `POST /api/auth/key-login { admin_key }` signs the buyer in
+  as Owner (admin key stored hashed).
+- **Join by invite key:** `POST /api/auth/join { invite_key, email, password }`
+  adds a member (seat-capped) and signs them in — joins count toward billing.
+- **Billing view:** `GET /api/admin/subscription` returns the plan, the invite
+  key, live member count, and per-seat price (Individual flat \$9; Group \$6/seat;
+  Enterprise \$10/seat). Pricing in `core/plans.py::price_for`.
+- **Model:** `Organization.admin_key_hash` + `invite_key` (migration
+  `c3d4e5f6a7b8`); `core/security.py` key gen/hash. **Tests:**
+  `server/tests/test_billing_keys.py`. Full suite **309** green; drift-free.
+
 ### Production hardening — fail-fast on insecure secrets (bug fix)
 
 - **Fix (critical): the production secret check never ran.**

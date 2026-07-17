@@ -104,3 +104,13 @@ def test_error_detail_propagated():
     with pytest.raises(ApiError) as e:
         c.add_block("domain", "x")
     assert e.value.status == 402 and "Team plan" in e.value.message
+
+
+def test_login_key_stores_bearer():
+    c, s = _client()
+    s.handler = lambda m, u, kw: FakeResp(200, {"access_token": "keyjwt", "refresh_token": "r"})
+    c.login_key("sgk_abc")
+    call = s.calls[-1]
+    assert call["url"].endswith("/api/auth/key-login")
+    assert call["json"] == {"admin_key": "sgk_abc"}
+    assert c.access_token == "keyjwt"

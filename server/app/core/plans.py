@@ -29,6 +29,10 @@ PLANS: dict[str, dict] = {
         "compliance_reports": False,
         "sso": False,
         "ai_assistant": True,
+        # Billing: flat monthly price, no per-seat (single user).
+        "base_price": 9,
+        "price_per_seat": 0,
+        "has_invite_key": False,   # individual = admin key only
     },
     "team": {
         "label": "Team",
@@ -41,6 +45,10 @@ PLANS: dict[str, dict] = {
         "compliance_reports": True,
         "sso": False,
         "ai_assistant": True,
+        # Billing: per-member (seat) pricing; members join with the invite key.
+        "base_price": 0,
+        "price_per_seat": 6,
+        "has_invite_key": True,
     },
     "enterprise": {
         "label": "Enterprise",
@@ -53,8 +61,22 @@ PLANS: dict[str, dict] = {
         "compliance_reports": True,
         "sso": True,
         "ai_assistant": True,
+        "base_price": 0,
+        "price_per_seat": 10,
+        "has_invite_key": True,
     },
 }
+
+
+def price_for(plan: str, member_count: int) -> dict:
+    """Monthly subscription price given the plan and current member count."""
+    p = get_plan(plan)
+    base = p.get("base_price", 0)
+    per_seat = p.get("price_per_seat", 0)
+    total = base + per_seat * max(member_count, 0)
+    return {"base_price": base, "price_per_seat": per_seat,
+            "members": member_count, "total_price": total, "currency": "USD",
+            "billing": "monthly"}
 
 PLAN_NAMES = tuple(PLANS)
 _LEGACY_PLAN = "enterprise"   # missing org row -> full features (non-breaking)

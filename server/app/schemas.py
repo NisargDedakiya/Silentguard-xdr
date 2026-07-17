@@ -57,6 +57,44 @@ class SignupRequest(BaseModel):
     plan: str = "individual"  # individual | team (enterprise is sales-led)
 
 
+class ProvisionRequest(BaseModel):
+    plan: str                 # individual | team | enterprise
+    org_name: str
+    admin_email: Optional[str] = None
+
+
+class ProvisionResponse(BaseModel):
+    org_id: str
+    slug: str
+    plan: str
+    admin_key: str                       # log in with this
+    invite_key: Optional[str] = None     # share this so members can join (group/enterprise)
+    owner_email: str
+
+
+class KeyLoginRequest(BaseModel):
+    admin_key: str
+
+
+class JoinRequest(BaseModel):
+    invite_key: str
+    email: str
+    password: str
+
+
+class SubscriptionOut(BaseModel):
+    plan: str
+    plan_label: str
+    invite_key: Optional[str] = None
+    members: int
+    max_members: int          # 0 = unlimited
+    base_price: float
+    price_per_seat: float
+    total_price: float
+    currency: str = "USD"
+    billing: str = "monthly"
+
+
 class InviteRequest(BaseModel):
     email: str
     role: str = "read_only"

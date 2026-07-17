@@ -48,6 +48,26 @@ def verify_password(password: str, encoded: str) -> bool:
     return hmac.compare_digest(candidate, expected)
 
 
+# -- account keys (admin / invite) ----------------------------------------
+def generate_admin_key() -> str:
+    """A high-entropy admin key handed to a buyer to log into the dashboard."""
+    return "sgk_" + secrets.token_urlsafe(24)
+
+
+def generate_invite_key() -> str:
+    """A shorter, shareable join key members use to join a group/enterprise."""
+    return "join_" + secrets.token_urlsafe(9)
+
+
+def hash_key(key: str) -> str:
+    """Keys are already high-entropy, so a fast SHA-256 hash is sufficient."""
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def verify_key(key: str, hashed: str) -> bool:
+    return bool(hashed) and hmac.compare_digest(hash_key(key), hashed)
+
+
 # -- JWT tokens -----------------------------------------------------------
 class TokenError(Exception):
     """Raised when a token is missing/expired/invalid."""

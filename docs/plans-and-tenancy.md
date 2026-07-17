@@ -40,6 +40,38 @@ return **HTTP 402** ("upgrade your plan"):
 Clients discover what's unlocked via **`GET /api/admin/entitlements`**, which
 returns the caller org's plan and feature flags — use it to render the right UI.
 
+## Buying & keys (Individual / Group / Enterprise)
+
+Purchasing provisions an organization and hands the buyer **keys**:
+
+```
+POST /api/auth/provision { plan, org_name, admin_email? }
+```
+
+| Plan | Keys returned | Meaning |
+|---|---|---|
+| **Individual** | `admin_key` | Log into the dashboard. One user. |
+| **Group** (team) | `admin_key` + `invite_key` | Admin logs in; members **join** with the invite key. |
+| **Enterprise** | `admin_key` + `invite_key` | Admin manages + groups devices; invite key adds users. |
+
+- **Admin key** (`sgk_…`) — `POST /api/auth/key-login { admin_key }` signs the
+  buyer in as the org **Owner**. Stored hashed.
+- **Invite / join key** (`join_…`) — shareable. `POST /api/auth/join
+  { invite_key, email, password }` adds a member and signs them in. Shown to the
+  admin (so they can share it) and used to **count members** for billing.
+
+### Billing view
+
+`GET /api/admin/subscription` (admin) returns the plan, the **invite key**, the
+current **member count**, and the resulting **price**:
+
+- Individual: flat `base_price` (\$9/mo).
+- Group: `price_per_seat` (\$6) × members — so the invite-key joins drive the bill.
+- Enterprise: `price_per_seat` (\$10) × members.
+
+Enterprise admins group specific devices into departments (`/api/admin/groups`
++ `/api/admin/devices/{id}/group`) and manage each group's policy.
+
 ## The SaaS role model (like normal team software)
 
 The lifecycle works the way people expect from Slack/GitHub/etc.:

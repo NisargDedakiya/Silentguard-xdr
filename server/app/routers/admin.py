@@ -282,6 +282,25 @@ def get_entitlements(db: Session = Depends(get_db), principal: Principal = ReadF
     return plans.entitlements_for(db, owning_org(principal))
 
 
+@router.get("/subscription", response_model=schemas.SubscriptionOut)
+def get_subscription(db: Session = Depends(get_db), principal: Principal = ReadFleet):
+    """The admin dashboard's billing view: plan, the shareable invite/join key,
+    current member count, and the resulting per-seat price."""
+    from ..core import plans
+    from ..models import Organization, User
+    org_id = owning_org(principal)
+    org = db.get(Organization, org_id)
+    ent = plans.entitlements_for(db, org_id)
+    members = db.query(User).filter(User.org_id == org_id).count()
+    price = plans.price_for(ent["plan"], members)
+    return schemas.SubscriptionOut(
+        plan=ent["plan"], plan_label=ent.get("label", ent["plan"].title()),
+        invite_key=(org.invite_key if org else None),
+        members=members, max_members=ent["max_users"],
+        base_price=price["base_price"], price_per_seat=price["price_per_seat"],
+        total_price=price["total_price"])
+
+
 @router.get("/audit", response_model=list[schemas.AuditOut])
 def list_audit(limit: int = 100, db: Session = Depends(get_db), principal: Principal = ReadAudit):
     """Read-only audit trail of admin actions, newest first."""

@@ -39,7 +39,7 @@ class ConsoleApp:
             ("url", "Server URL", "http://127.0.0.1:8000", ""),
             ("email", "Email (or leave blank for admin token)", "", ""),
             ("password", "Password", "", "*"),
-            ("token", "Admin token (optional)", "", "*"),
+            ("token", "Admin key or token (optional)", "", "*"),
         ], start=1):
             tk.Label(box, text=label, fg=FG, bg=CARD, anchor="w").grid(row=i, column=0, sticky="w")
             v = tk.StringVar(value=default)
@@ -58,8 +58,11 @@ class ConsoleApp:
             return
         api = ApiClient(url)
         try:
-            if self.vars["token"].get().strip():
-                api.login_admin(self.vars["token"].get().strip())
+            key = self.vars["token"].get().strip()
+            if key.startswith("sgk_"):
+                api.login_key(key)                 # org admin key from provisioning
+            elif key:
+                api.login_admin(key)               # legacy platform admin token
             elif self.vars["email"].get().strip():
                 api.login_user(self.vars["email"].get().strip(), self.vars["password"].get())
             else:

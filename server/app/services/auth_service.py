@@ -160,6 +160,81 @@ def accept_invite(db: Session, raw: str, password: str) -> User:
     return user
 
 
+# -- key-based purchase model (Individual / Group / Enterprise) -----------
+def provision(db: Session, plan: str, org_name: str, admin_email: str | None = None) -> dict:
+    """Provision a purchased subscription: create the organization + its owner,
+    and mint the keys the buyer receives.
+
+    - Individual  -> an **admin key** (dashboard login).
+    - Team (Group)/Enterprise -> an **admin key** + a shareable **invite/join key**
+      that members use to join (the join count drives per-seat billing).
+    """
+    from ..core.plans import PLAN_NAMES, get_plan
+    from ..core.security import generate_admin_key, generate_invite_key, hash_key
+    from ..models import Organization
+
+    if plan not in PLAN_NAMES:
+        raise AuthError(400, f"plan must be one of {list(PLAN_NAMES)}")
+    admin_key = generate_admin_key()
+    invite_key = generate_invite_key() if get_plan(plan).get("has_invite_key") else None
+    org = Organization(name=(org_name.strip() or "My Organization"),
+                       slug=_unique_slug(db, org_name or "org"), plan=plan,
+                       admin_key_hash=hash_key(admin_key), invite_key=invite_key)
+    db.add(org)
+    db.flush()
+    owner_email = (admin_email or f"admin@{org.slug}").strip().lower()
+    owner = User(email=owner_email, hashed_password=hash_password(secrets.token_urlsafe(24)),
+                 role=Role.OWNER.value, org_id=org.id, is_active=True, email_verified=True)
+    db.add(owner)
+    db.commit()
+    log.info("provisioned", extra={"plan": plan, "org": org.slug})
+    return {"org_id": org.id, "slug": org.slug, "plan": plan,
+            "admin_key": admin_key, "invite_key": invite_key, "owner_email": owner_email}
+
+
+def key_login(db: Session, admin_key: str) -> User:
+    """Resolve an admin key to its org owner (dashboard login by key)."""
+    from ..core.security import hash_key
+    from ..models import Organization
+
+    org = db.query(Organization).filter(
+        Organization.admin_key_hash == hash_key(admin_key)).first()
+    if org is None or not org.is_active:
+        raise AuthError(401, "Invalid admin key")
+    owner = db.query(User).filter(User.org_id == org.id, User.role == Role.OWNER.value,
+                                  User.is_active.is_(True)).first()
+    if owner is None:
+        raise AuthError(401, "No active admin for this key")
+    owner.last_login_at = utcnow()
+    db.commit()
+    return owner
+
+
+def join_via_invite(db: Session, invite_key: str, email: str, password: str) -> User:
+    """Join a group/enterprise with its invite key (seat-capped). New members
+    count toward the subscription's member total."""
+    from ..core import plans
+    from ..models import Organization
+
+    org = db.query(Organization).filter(Organization.invite_key == invite_key.strip()).first()
+    if org is None or not org.is_active:
+        raise AuthError(400, "Invalid invite key")
+    members = db.query(User).filter(User.org_id == org.id).count()
+    if not plans.within_limit(db, org.id, "max_users", members):
+        raise AuthError(402, "This group has reached its member limit")
+    email = email.strip().lower()
+    if db.query(User).filter(User.email == email).first():
+        raise AuthError(409, "A user with that email already exists")
+    validate_password(password)
+    user = User(email=email, hashed_password=hash_password(password),
+                role=Role.READ_ONLY.value, org_id=org.id, is_active=True, email_verified=True)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    log.info("member joined", extra={"email": email, "org": org.slug})
+    return user
+
+
 # -- login ----------------------------------------------------------------
 def authenticate(db: Session, email: str, password: str, client_key: str = "") -> User:
     if _rate_limited(client_key or email):

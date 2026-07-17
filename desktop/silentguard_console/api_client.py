@@ -51,6 +51,13 @@ class ApiClient:
         self._request("GET", "/api/admin/entitlements")  # validates the token
         return True
 
+    def login_key(self, admin_key: str) -> dict:
+        """Log in with an org admin key (from provisioning)."""
+        data = self._request("POST", "/api/auth/key-login", json={"admin_key": admin_key})
+        self.access_token = data["access_token"]
+        self.admin_token = None
+        return data
+
     def login_user(self, email: str, password: str, mfa_code: str | None = None) -> dict:
         body = {"email": email, "password": password}
         if mfa_code:

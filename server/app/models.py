@@ -28,6 +28,11 @@ class Organization(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Subscription plan drives feature entitlements: individual | team | enterprise.
     plan: Mapped[str] = mapped_column(String(16), default="individual")
+    # Purchase keys: the admin key (hashed) logs the buyer into the dashboard;
+    # the invite/join key (readable, shareable) lets members join a group/
+    # enterprise and drives the member count used for per-seat billing.
+    admin_key_hash: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    invite_key: Mapped[str | None] = mapped_column(String(48), index=True, nullable=True)
     # Licensing (M16): tier + device cap (0 = use the plan default / unlimited).
     license_tier: Mapped[str] = mapped_column(String(32), default="community")
     max_devices: Mapped[int] = mapped_column(Integer, default=0)

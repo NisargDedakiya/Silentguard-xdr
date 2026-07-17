@@ -53,9 +53,10 @@ if settings.database_url.startswith("sqlite"):
     Base.metadata.create_all(bind=engine)
 
 
-@contextlib.asynccontextmanager
 def _check_production_secrets() -> None:
-    """Warn loudly if a production deployment is running on demo defaults."""
+    """In production, refuse to start on insecure demo defaults (fail fast) so a
+    deployment can't silently ship with the demo admin token / no JWT secret.
+    Set SG_ALLOW_INSECURE=1 to downgrade this to a warning (not recommended)."""
     if not settings.is_production:
         return
     problems = []
@@ -67,8 +68,15 @@ def _check_production_secrets() -> None:
         problems.append("SG_JWT_SECRET is unset (derived from the admin token)")
     if settings.cors_origin_list == ["*"]:
         problems.append("SG_CORS_ORIGINS is '*'")
+    if not problems:
+        return
     for p in problems:
-        log.warning("INSECURE PRODUCTION CONFIG: %s", p)
+        log.error("INSECURE PRODUCTION CONFIG: %s", p)
+    if not settings.allow_insecure:
+        raise RuntimeError(
+            "Refusing to start in production with insecure config: "
+            + "; ".join(problems)
+            + ". Set these securely, or SG_ALLOW_INSECURE=1 to override.")
 
 
 async def lifespan(app: FastAPI):

@@ -144,6 +144,9 @@ class Settings(BaseSettings):
     # SSRF: also block RFC1918 private targets for outbound integrations (leave
     # off to permit internal SIEM endpoints).
     block_private_integrations: bool = Field(default=False, alias="SG_BLOCK_PRIVATE_INTEGRATIONS")
+    # Escape hatch: allow the server to boot in production despite insecure demo
+    # secrets. Off by default so an insecure production deploy fails fast.
+    allow_insecure: bool = Field(default=False, alias="SG_ALLOW_INSECURE")
 
     @property
     def cors_origin_list(self) -> list[str]:

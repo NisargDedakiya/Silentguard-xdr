@@ -6,6 +6,36 @@ MVP toward an enterprise XDR platform following the plan in
 
 ## [Unreleased]
 
+### Production hardening — fail-fast on insecure secrets (bug fix)
+
+- **Fix (critical): the production secret check never ran.**
+  `_check_production_secrets` was wrongly decorated with
+  `@contextlib.asynccontextmanager` on a non-generator function and called as a
+  plain call, so the body was skipped — a production deploy could silently ship
+  with the demo admin token / no JWT secret. Removed the decorator and made the
+  check **fail fast**: in production with demo `SG_ADMIN_TOKEN` /
+  `SG_ENROLL_TOKEN`, an unset `SG_JWT_SECRET`, or `SG_CORS_ORIGINS=*`, the server
+  now **refuses to boot** (raises), unless `SG_ALLOW_INSECURE=1` downgrades it to
+  a warning.
+- **Config:** `SG_ALLOW_INSECURE` (default off). **Tests:** 4 cases in
+  `test_security.py` (refuse / override / secure-config / dev-skip). Full server
+  suite **299** green; agent 119; desktop 17.
+
+### SaaS role model — signup, org Owner, invitations
+
+- **Self-service signup:** `POST /api/auth/signup` creates a new organization and
+  its **Owner**, then signs you in (Individual/Team plans; Enterprise coerced to
+  Individual — sales-led).
+- **New `owner` role:** full control of *their own* org (all permissions except
+  platform-wide `MANAGE_ORGS`), org-scoped (not cross-org). `super_admin` remains
+  the only cross-org platform role.
+- **Team invitations:** `POST /api/admin/users/invite` (org-scoped, seat-capped)
+  issues a single-use invite token; `POST /api/auth/accept-invite` activates the
+  member and signs them in. Reuses the M7 token infra (`invite` purpose).
+- **Tests:** `server/tests/test_signup_invite.py` (signup, owner scoping,
+  invite→accept, individual seat cap, role change). Full suite **295** green.
+  **Docs:** `docs/plans-and-tenancy.md` (SaaS role model + hierarchy).
+
 ### Enterprise / Groups / Individuals — org management, members, home mode
 
 - **Organization management (super-admin):** new `MANAGE_ORGS` permission +

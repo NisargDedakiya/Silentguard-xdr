@@ -21,6 +21,31 @@ def _audit(db: Session, actor: str, action: str, target: str, org_id: str | None
     db.commit()
 
 
+@router.post("/signup", response_model=schemas.TokenResponse, status_code=201)
+def signup(body: schemas.SignupRequest, db: Session = Depends(get_db)):
+    """Self-service registration: creates a new organization and signs you in as
+    its owner (Individual or Team plan; Enterprise is sales-led)."""
+    try:
+        user = auth_service.signup(db, body.email, body.password, body.org_name, body.plan)
+        tokens = auth_service.issue_tokens(db, user)
+    except auth_service.AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    _audit(db, f"user:{user.id}", "signup", user.email, org_id=user.org_id)
+    return tokens
+
+
+@router.post("/accept-invite", response_model=schemas.TokenResponse)
+def accept_invite(body: schemas.AcceptInviteRequest, db: Session = Depends(get_db)):
+    """Accept a team invitation by setting a password; signs you in."""
+    try:
+        user = auth_service.accept_invite(db, body.token, body.password)
+        tokens = auth_service.issue_tokens(db, user)
+    except auth_service.AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    _audit(db, f"user:{user.id}", "invite_accept", user.email, org_id=user.org_id)
+    return tokens
+
+
 @router.post("/login", response_model=schemas.TokenResponse)
 def login(body: schemas.LoginRequest, request: Request, db: Session = Depends(get_db)):
     try:

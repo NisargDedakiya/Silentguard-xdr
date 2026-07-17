@@ -50,6 +50,30 @@ class DeviceGroupOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    org_name: str
+    plan: str = "individual"  # individual | team (enterprise is sales-led)
+
+
+class InviteRequest(BaseModel):
+    email: str
+    role: str = "read_only"
+
+
+class InviteResponse(BaseModel):
+    email: str
+    role: str
+    status: str = "invited"
+    invite_token: Optional[str] = None  # returned only when token exposure is on
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+    password: str
+
+
 class UserRoleUpdate(BaseModel):
     role: str
 

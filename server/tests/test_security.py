@@ -60,3 +60,46 @@ def test_integration_accepts_public_url(client):
             "name": "ok", "kind": "slack", "config": {"url": "https://hooks.slack/x"}},
             headers=ADMIN_HEADERS)
     assert r.status_code == 201
+
+
+# -- production secret guard (fail-fast) ----------------------------------
+def test_production_refuses_demo_secrets(monkeypatch):
+    """In production, insecure demo defaults must refuse to boot."""
+    import pytest
+    from app.main import _check_production_secrets
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "admin_token", "silentguard-admin-demo")
+    monkeypatch.setattr(settings, "enroll_token", "silentguard-enroll-demo")
+    monkeypatch.setattr(settings, "jwt_secret", "")
+    monkeypatch.setattr(settings, "allow_insecure", False)
+    with pytest.raises(RuntimeError):
+        _check_production_secrets()
+
+
+def test_production_override_allows_boot(monkeypatch):
+    from app.main import _check_production_secrets
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "admin_token", "silentguard-admin-demo")
+    monkeypatch.setattr(settings, "allow_insecure", True)
+    _check_production_secrets()  # must not raise
+
+
+def test_production_secure_config_boots(monkeypatch):
+    from app.main import _check_production_secrets
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "admin_token", "real-admin-token")
+    monkeypatch.setattr(settings, "enroll_token", "real-enroll-token")
+    monkeypatch.setattr(settings, "jwt_secret", "a-real-secret")
+    monkeypatch.setattr(settings, "cors_origins", "https://app.example")
+    monkeypatch.setattr(settings, "allow_insecure", False)
+    _check_production_secrets()  # must not raise
+
+
+def test_dev_skips_secret_check(monkeypatch):
+    from app.main import _check_production_secrets
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "environment", "development")
+    _check_production_secrets()  # no-op in dev
